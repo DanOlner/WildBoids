@@ -8,6 +8,86 @@ Claude-drafted, with a few notes and additions from me once made, using this pro
 
 ## Part 1: Sensory Systems - How Boids Perceive the World
 
+### Craig Reynolds' Original Boids (1987)
+
+Reynolds' foundational paper ["Flocks, Herds, and Schools: A Distributed Behavioral Model"](https://dl.acm.org/doi/10.1145/37401.37406) (SIGGRAPH '87) established three steering rules that produce emergent flocking from purely local interactions.
+
+#### The Three Rules (in priority order)
+
+Reynolds defined these as a **priority hierarchy**, not equal-weighted forces:
+
+1. **Collision Avoidance / Separation** (highest priority)
+   - Steer to avoid crowding nearby flockmates
+   - Addresses immediate spatial conflicts
+   - Implementation: accumulate a repulsion vector from all flockmates within a "protected range", scaled by an `avoidfactor`
+
+2. **Velocity Matching / Alignment** (medium priority)
+   - Steer toward the average heading of nearby flockmates
+   - Provides predictive collision prevention (maintaining separation over time)
+   - Implementation: compute average velocity of visible neighbors, steer toward it scaled by a `matchingfactor`
+
+3. **Flock Centering / Cohesion** (lowest priority)
+   - Steer toward the average position of nearby flockmates
+   - Keeps the flock together as a group
+   - Implementation: compute center of mass of visible neighbors, steer toward it scaled by a `centeringfactor`
+
+#### Prioritized Acceleration Allocation
+
+Rather than simply summing weighted forces (which can cause opposing forces to cancel out), Reynolds used a **priority-based acceleration budget**:
+
+- Each behavior generates an acceleration request (a 3D vector)
+- Requests are processed in priority order
+- Each request's magnitude is accumulated until the total exceeds maximum available acceleration
+- The final request is trimmed proportionally to fit the budget
+- Lower-priority behaviors go unsatisfied if higher-priority needs consume all available acceleration
+
+This prevents the "cancellation problem" where, e.g., equal-and-opposite separation and cohesion forces would produce zero net movement.
+
+#### Local Perception Model
+
+Each boid perceives only a local neighborhood, defined by:
+
+- **Distance threshold**: maximum detection range
+- **Inverse-square distance weighting**: nearby flockmates have much stronger influence than distant ones. Reynolds tried linear weighting first but found inverse-square matched zoological observations that "a fish is much more strongly influenced by its near neighbors than by distant members"
+- Flockmates outside this neighborhood are ignored entirely
+
+The paper emphasizes that **localized perception is essential** for realistic flocking — global awareness produces qualitatively different (and less natural) aggregate motion.
+
+#### Flight Model
+
+- **Geometric flight**: incremental transformations — forward translation along local Z-axis, steering rotations (pitch/yaw)
+- **Banking**: roll aligns local Y-axis with lateral acceleration direction (visual realism)
+- **Momentum conservation**: boids maintain velocity tendencies, preventing instant direction changes
+- **Viscous speed damping**: prevents unlimited acceleration
+- **Speed limits**: minimum and maximum speed parameters
+
+#### Obstacle Avoidance
+
+Reynolds described two approaches:
+
+1. **Force field model**: repulsion field emanating from obstacles — simple but fails when approaching perpendicular to the field
+2. **Steer-to-avoid** (preferred): boid considers only obstacles intersecting its forward path, identifies the closest silhouette edge, and steers to pass one body length beyond it
+
+#### Computational Complexity
+
+Naive implementation is **O(n²)** (each boid checks all others). Reynolds proposed **spatial partitioning** (position-based lattice bins) to reduce neighbor lookups toward O(n).
+
+### Key Later Extensions
+
+Several researchers built on Reynolds' foundation:
+
+- **Reynolds (1999)** — ["Steering Behaviors for Autonomous Characters"](https://www.red3d.com/cwr/steer/): Expanded the behavioral repertoire to include leader following, path following, unaligned collision avoidance, and wandering. This became a widely-used reference for game AI.
+
+- **Delgado-Mata et al.** — Added **fear and pheromone transmission**: emotion spreads between agents via olfactory signals modeled as particles in a free-expansion gas. This introduced affective state as a flocking influence.
+
+- **Hartman and Benes** — ["Autonomous Boids"](https://wiki.santafe.edu/images/3/3f/Hartman,_Benes_-_Autonomous_Boids.pdf): Introduced a **change of leadership** force complementing alignment. A leadership parameter controls the probability of a boid "breaking away" from the flock; others follow once the leader slows. When leadership = 0, the model reduces to standard Reynolds.
+
+- **Predator extensions** — Various implementations add a [predator that boids must avoid](https://vanhunteradams.com/Pico/Animal_Movement/Boids-predator.html), typically as a high-priority repulsion force that overrides normal flocking when a predator is detected within range.
+
+- **UAV/robotics applications** — Recent work combines boids with [reinforcement learning](https://www.mdpi.com/2075-1702/13/4/255) and control barrier functions for real-world multi-agent coordination with safety guarantees.
+
+---
+
 ### Original Wild Boids Approach (2007)
 
 The original implementation used **6 configurable fields of view (FOV)** per boid:
