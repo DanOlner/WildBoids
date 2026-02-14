@@ -1,6 +1,6 @@
 # Physically-Grounded Boid Locomotion
 
-CLaude-generated doc. Prompts/replies are [here](llm_convos/2026-01-20_1706_Read_the_CLAUDEmd_file_and_then.md) (latter half).
+Claude-generated doc. Prompts/replies are [here](llm_convos/2026-01-20_1706_Read_the_CLAUDEmd_file_and_then.md) (latter half).
 
 ---
 
