@@ -669,3 +669,338 @@ Done. I've added a detailed section on Reynolds' original boids covering:
 - **Computational complexity** and spatial partitioning
 
 Plus a **Key Later Extensions** subsection covering Reynolds' own 1999 steering behaviors paper, Delgado-Mata's fear/pheromones, Hartman & Benes' leadership dynamics, predator extensions, and modern UAV applications.
+
+
+## Human (9)
+
+*[Opened file: /temp/readonly/WebFetch tool output (9u5bql)]*
+OK, in the new markdown script @boid_theory.md we're going to explore some new options that might fit better with exploring evolution impacts. First, digest again everything in @evolution_theory.md. Then - in my 2007 wildboids, an issue I had was that boids evolved to "hack" the underlying physics (which weren't really physics, as Reynolds' verison isn't , it's psuedo-physics). So I am thinking of making the boids more physically grounded. My current idea: use actual thrust vectors and thrust for rotation (which will also allow energy to be used and run out). I think (but feel free to make other suggestions) a simple option would be one thruster each on front and back, and then two side thrusters near the back that allow for rotation. Find some sources and lay out some thoughts on this more physically grounded approach.
+
+
+## Assistant
+
+Let me research physically-grounded agent locomotion models and thrust-based steering.
+
+
+## Assistant
+
+*[Web search: "thrust vector physics-based steering autonomous agent simulation forward backward rotation thrusters"]*
+
+
+## Assistant
+
+*[Web search: "physics-based boids realistic locomotion energy cost movement simulation"]*
+
+> **Tool result:** Web search results for query: "physics-based boids realistic locomotion energy cost movement simulation"  Links: [{"title":"Monte Carlo Analysis of Boid Simulations with Obstacles: A Physics-Based Per...
+
+> **Tool result:** Web search results for query: "thrust vector physics-based steering autonomous agent simulation forward backward rotation thrusters"  Links: [{"title":"Steering Behaviors For Autonomous Characters","u...
+
+
+## Assistant
+
+*[Web search: "2D spacecraft thruster physics simulation game rotation thrust model rigid body"]*
+
+
+## Assistant
+
+*[Web search: ""artificial fish" Tu Terzopoulos physics locomotion perception behavior SIGGRAPH energy"]*
+
+> **Tool result:** Web search results for query: ""artificial fish" Tu Terzopoulos physics locomotion perception behavior SIGGRAPH energy"  Links: [{"title":"Artificial Fishes: Physics, Locomotion, Perception, Behavior"...
+
+> **Tool result:** Web search results for query: "2D spacecraft thruster physics simulation game rotation thrust model rigid body"  Links: [{"title":"Thrust (video game) - Wikipedia","url":"https://en.wikipedia.org/wiki...
+
+
+## Assistant
+
+*[Fetch: https://gamedevelopment.tutsplus.com/tutorials/using-torque-and-thrusters-to-move-and-rotate-a-player-designed-spaceship--gamedev-2610]*
+
+
+## Assistant
+
+*[Web search: "evolved locomotion energy budget artificial life creature physics simulation thruster efficiency"]*
+
+> **Tool result:** REDIRECT DETECTED: The URL redirects to a different host.  Original URL: https://gamedevelopment.tutsplus.com/tutorials/using-torque-and-thrusters-to-move-and-rotate-a-player-designed-spaceship--gamed...
+
+> **Tool result:** Web search results for query: "evolved locomotion energy budget artificial life creature physics simulation thruster efficiency"  Links: [{"title":"Energy-Based Models for Virtual Creatures | Artifici...
+
+
+## Assistant
+
+*[Fetch: https://code.tutsplus.com/using-torque-and-thrusters-to-move-and-rotate-a-player-designed-spaceship--gamedev-2610t]*
+
+
+## Assistant
+
+*[Fetch: https://direct.mit.edu/isal/proceedings/isal2024/36/30/123447]*
+
+> **Tool result:** Request failed with status code 403
+
+> **Tool result:** <tool_use_error>Sibling tool call errored</tool_use_error>
+
+
+## Assistant
+
+*[Fetch: https://code.tutsplus.com/using-torque-and-thrusters-to-move-and-rotate-a-player-designed-spaceship--gamedev-2610t]*
+
+> **Tool result:** # Physics Model for 2D Spaceship Thrusters  ## Thruster Positioning  Thrusters are positioned at various locations on a modular ship grid. Each thruster has an orientation (NORTH, SOUTH, EAST, or WEST...
+
+
+## Assistant
+
+*[Web search: "2D rigid body physics simulation tutorial torque angular velocity moment inertia simple implementation game"]*
+
+> **Tool result:** Web search results for query: "2D rigid body physics simulation tutorial torque angular velocity moment inertia simple implementation game"  Links: [{"title":"Rigid body dynamics - Wikipedia","url":"h...
+
+
+## Assistant
+
+Now I have enough material. Let me write the document.
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/Code/claude/wildboids/boid_theory.md
+
+
+## Assistant
+
+Done. [boid_theory.md](boid_theory.md) lays out the thrust-based approach in detail. Here's the key thinking:
+
+**The core model**: 4 thrusters (front, rear, left-rear, right-rear) on a 2D rigid body. The boid brain outputs 4 values (0-1 thrust power), and all movement emerges from real physics — force produces acceleration, torque produces rotation, drag creates terminal velocity.
+
+**Why this solves the hacking problem**: Boids can't exploit pseudo-physics because there aren't any. Instant reversals are impossible (inertia), wasteful movement is punished (energy cost), and speed-vs-manoeuvrability is a real physical trade-off, not an arbitrary parameter.
+
+**The energy angle is key**: Every thruster firing drains energy. This naturally selects for efficient locomotion — evolution should discover coast-and-burst patterns, minimal braking, economical turning. The Tu & Terzopoulos artificial fish work showed exactly this: optimizing for energy conservation produces realistic movement.
+
+**Clean interface to the genome**: The sensor→thruster mapping is simple (each sensor has 4 evolved weights, one per thruster), making it a natural fit with the direct parameter encoding from evolution_theory.md.
+
+**Open questions** worth discussing: whether thruster positions or mass should themselves be evolvable, whether to use continuous (0-1) or binary (on/off) thrusters, and whether to add directional drag asymmetry.
+
+
+## Human (10)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/boid_theory.md]*
+Can you add a section in @boid_theory.md after "the problem with pseudo-physics" and before "proposed model" with some research/sources that can help you summarise this question - from nature, if we think about translating bird or animal movement to the 2D plane we'll be using here, is this simple "front / back / two lateral thrusters" model a reasonable (if crude) simplification? Should we consider any other approach?
+
+
+## Assistant
+
+Let me research how animal locomotion maps to 2D thrust models.
+
+
+## Assistant
+
+*[Web search: "fish locomotion forces thrust turning pectoral fins caudal fin biomechanics 2D model"]*
+
+
+## Assistant
+
+*[Web search: "bird flight forces simplified 2D model thrust lift drag turning banking physics"]*
+
+
+## Assistant
+
+*[Web search: "animal locomotion reduced model degrees of freedom forward thrust steering torque biological"]*
+
+> **Tool result:** Web search results for query: "animal locomotion reduced model degrees of freedom forward thrust steering torque biological"  Links: [{"title":"The Generation of Forces and Moments during Visual-Evoke...
+
+> **Tool result:** Web search results for query: "bird flight forces simplified 2D model thrust lift drag turning banking physics"  Links: [{"title":"1","url":"https://www.biorxiv.org/content/10.1101/2023.12.29.573672v1...
+
+> **Tool result:** Web search results for query: "fish locomotion forces thrust turning pectoral fins caudal fin biomechanics 2D model"  Links: [{"title":"Investigation of Fish Caudal Fin Locomotion Using a Bio-Inspired...
+
+
+## Assistant
+
+*[Fetch: https://pmc.ncbi.nlm.nih.gov/articles/PMC8767207/]*
+
+
+## Assistant
+
+*[Web search: "unicycle model bicycle model differential drive 2D agent locomotion comparison turning radius"]*
+
+> **Tool result:** # Animal Movement Modeling: Degrees of Freedom and Control Decomposition  Based on the editorial content provided, the document does not contain detailed information about simplified degrees-of-freedo...
+
+> **Tool result:** Web search results for query: "unicycle model bicycle model differential drive 2D agent locomotion comparison turning radius"  Links: [{"title":"12.1.3. The Unicycle Model — Robotics Programming Study...
+
+
+## Assistant
+
+*[Web search: "fish swimming modes BCF MPF body caudal fin median paired fin thrust maneuvering tradeoff"]*
+
+> **Tool result:** Web search results for query: "fish swimming modes BCF MPF body caudal fin median paired fin thrust maneuvering tradeoff"  Links: [{"title":"The Effect of Locomotion Mode on Body Shape Evolution in Te...
+
+
+## Assistant
+
+*[Web search: "Braitenberg vehicle simple sensor-motor architecture artificial creature locomotion model"]*
+
+> **Tool result:** Web search results for query: "Braitenberg vehicle simple sensor-motor architecture artificial creature locomotion model"  Links: [{"title":"Braitenberg vehicle - Wikipedia","url":"https://en.wikipedi...
+
+
+## Assistant
+
+Good — Braitenberg vehicles are a very relevant reference point. Now let me write the new section.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:**     18→- Boids can evolve to make **physically impossible** turns (instant reversal)     19→- There's no energy cost to movement, so evolved strategies face no efficiency pressure     20→- Without ine...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/boid_theory.md has been updated successfully.
+
+
+## Assistant
+
+Done. The new section sits between "The Problem with Pseudo-Physics" and "Proposed Model" and covers:
+
+**From biology:**
+- Animal locomotion in the horizontal plane consistently reduces to ~3 effective DOF: forward thrust, yaw torque, and braking — even Drosophila flight dynamics decompose this way
+- The fish BCF/MPF distinction provides a direct biological analogue for the speed-vs-manoeuvrability trade-off that the thruster model creates
+- The mapping from our 4 thrusters to biological structures (caudal fin, pectoral fins, wing asymmetries) is defensible
+
+**From robotics:**
+- The unicycle model (what Reynolds effectively uses) is kinematic and non-physical
+- The differential drive model maps naturally to "two side thrusters"
+- Braitenberg vehicles are a key reference — simple sensor→motor wiring produces rich emergent behavior, directly relevant to evolved sensor→thruster mappings
+
+**Alternative models assessed:**
+- **3-thruster** (no front brake) — arguably more biologically honest, most animals brake via drag; smaller genome
+- **2-thruster differential** — most elegant, smallest genome, but possibly too constrained
+- **Steerable single thruster** — simpler output but loses the emergent quality of combining fixed thrusters
+
+**Verdict:** The 4-thruster model is reasonable, the 3-thruster variant is worth serious consideration, and the choice should be tested empirically early on.
+
+
+## Human (11)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/boid_theory.md]*
+You wrote this sentence: "Different moment arms would produce different turning characteristics." Line 85 in @boid_theory.md. What does that mean? Please add a chunk explaining that term.
+
+
+## Assistant
+
+Good question — "moment arm" is a physics term that's doing a lot of work in that sentence without explanation. Let me add a clarification right after that line.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/boid_theory.md has been updated successfully.
+
+
+## Assistant
+
+Added a blockquote explanation right after that sentence. It covers:
+
+- **What it is**: the perpendicular distance between the force line and the center of mass
+- **The formula**: torque = force × moment arm
+- **Why it matters for our model**: side thrusters at the rear have a long moment arm → strong rotation from small forces; at the center they'd just push sideways with no turning
+- **How it connects to the maths**: the **r** vector in the torque equation `τ = r.x × F.y − r.y × F.x` literally *is* the moment arm
+
+
+## Human (12)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/boid_theory.md]*
+OK, variable options for thrusters is really interesting. How much more complexity would it add to be able to define points on the wildboids' rigid body where thrusters sit, and at what angle? That wouldn't change mid-boid-life, so could be static at that point. This flexibility would then also give us the chance to test e.g. the differential thrust option with just two, requiring both to fire for forward motion. Add a section discussing this at the end of @boid_theory.md as "proposed model 2".
+
+
+## Assistant
+
+Let me think through the implementation complexity of evolvable thruster positions and write it up.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:**    340→- Turning arcs visible and physically grounded    341→- Energy bar per boid (or color-coded)    342→    343→---    344→    345→## Open Questions    346→    347→1. **Should thruster positions be...
+
+
+## Assistant
+
+Now let me also re-read the physics section to make sure Proposed Model 2 references it correctly.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:**    144→## The Physics    145→    146→### 2D Rigid Body Equations    147→    148→Each boid has these state variables:    149→    150→| Variable | Symbol | Description |    151→|----------|--------|----...
+
+
+## Assistant
+
+Good — the physics equations already use generic **r**_i and **d**_i per thruster, so they work unchanged for arbitrary positions and angles. Now let me write the new section.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/boid_theory.md has been updated successfully.
+
+
+## Assistant
+
+Done. The new "Proposed Model 2" section covers:
+
+**Complexity cost — surprisingly low:**
+- 3 extra genes per thruster (x-position, y-position, firing angle)
+- For 3 thrusters that's 9 genes, a ~30-50% increase on the sensory genome — modest
+- Zero runtime cost difference: the per-frame physics loop is identical, the only change is where thruster positions come from (genome instead of constants)
+- One-time setup at birth: ~6 multiplications per thruster
+
+**The key insight:** Model 2 subsumes Model 1. The fixed 4-thruster layout is just one possible genome configuration. The differential 2-thruster Braitenberg layout is another. You don't need separate code paths — just different initial gene values and let evolution explore.
+
+**What evolution might discover:** asymmetric placements, angled thrusters that combine thrust + torque in one firing, different layouts for predators vs prey. Includes ASCII diagrams of plausible emergent configurations.
+
+**Degenerate configs:** discussed three mitigation strategies — pure natural selection (let bad layouts die), soft zonal constraints (e.g. "thruster 0 must be in rear half"), or perimeter-only placement.
+
+**Recommendation:** implement Model 2 from the start (barely harder), but seed initial populations with a sensible symmetric layout so evolution has a working starting point.
+
+
+## Human (13)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/boid_theory.md]*
+Excellent. Add in a note in the same chunk to say that we want the option to have pre-defined thruster numbers, position and angle that don't change, but that we can also turn them on so they're mutatable.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:**    397→    r_i.x = position_across × body_half_width    398→    r_i.y = position_along × body_half_length    399→    d_i   = (cos(firing_angle), sin(firing_angle))    400→```    401→    402→**Per fram...
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:**    470→| Design flexibility | One layout, test by recoding | Any layout, test by changing initial genes |    471→| Evolutionary richness | Brain only | Brain + body plan |    472→| Interpretability | ...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/boid_theory.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/boid_theory.md has been updated successfully.
+
+
+## Assistant
+
+Added a "Mutable vs Locked Thruster Geometry" subsection. The key points:
+
+- A **per-gene mutability flag** (`mutable: true/false`) on each thruster position/angle gene
+- Three modes from the same code: **fully locked** (= Model 1), **fully mutable** (full body-plan evolution), and **partially mutable** (e.g. lock one rear thruster, let others evolve)
+- Implementation is trivial: crossover and mutation just skip genes flagged as immutable
+- Enables controlled experiments: get brain evolution working with locked geometry first, then flip to mutable and see what body-plan changes emerge
