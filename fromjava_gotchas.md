@@ -229,6 +229,22 @@ A full rebuild of a large C++ project can take minutes to hours. Java compilatio
 - **Build generators like Ninja** (via CMake) are faster than Make.
 - **You develop differently.** You don't rebuild-the-world after every change. You rely on incremental builds and structure headers to minimize cascading recompilation.
 
+#### How This Maps to the Wildboids Architecture
+
+The loose coupling in our design (Sensory → Processing → Thruster, communicating via float arrays) maps directly onto separate compilation units. Each layer gets its own `.h`/`.cpp` pair. When you change the internals of `NeatNetwork::activate()`, only `neat_network.cpp` recompiles. The sensory layer, thruster layer, physics — all stay as already-compiled `.o` files. The linker stitches them together at the end.
+
+A typical edit-compile-test cycle:
+
+1. You're working on the NEAT network
+2. You edit `neat_network.cpp`
+3. `cmake --build build` recompiles *just that file* (sub-second), then re-links (fast)
+4. You run your tests for that module
+5. Everything else — sensors, thrusters, physics, evolution — stays compiled
+
+This is why the header/source split (§1.4) and forward declarations (§4.7) matter so much more in C++ than Java's single-file model. A "leaky" header that `#include`s too much creates cascading recompilation — change one thing, rebuild half the project. A clean header that exposes only the interface keeps rebuilds fast.
+
+**Development strategy:** Build each layer as a self-contained unit with its own tests. Once a layer's tests pass and its interface is stable, you rarely recompile it again — it just sits there as a compiled `.o` while you work on other layers. The float-array interfaces mean the layers genuinely don't need to know each other's internals. You could be deep in NEAT implementation work and never recompile the physics or sensor code at all.
+
 ### 2.3 No Standard Package Manager
 
 There's no Maven Central. Options:
