@@ -246,6 +246,161 @@ The original 150-boid simulation will be trivial. With optimization, we can scal
 
 ---
 
+## Addendum: Native C++ / Apple Silicon Options
+
+The JavaScript browser approach above is one path. Another is to go native — C++ targeting Apple Silicon directly, gaining access to GPU compute and (potentially) the Neural Engine. Here's what that looks like.
+
+---
+
+### Can We Access the Neural Engine?
+
+**Short answer: not directly, and not for general-purpose compute.**
+
+The Apple Neural Engine (ANE) is a specialised ML inference accelerator. There is no public API for programming it directly — the low-level `AppleNeuralEngine.framework` is private to Apple. The only way to run work on the ANE is indirectly:
+
+- **Core ML:** You submit a trained ML model, and Core ML *automatically* decides whether to run it on CPU, GPU, or ANE. You can't force ANE usage or run arbitrary compute through it.
+- **MLX (Apple's ML framework):** Can distribute tensor operations across ANE, GPU, and CPU, but again only for ML-shaped workloads (matrix ops, convolutions, etc.).
+
+**Bottom line for Wild Boids:** The Neural Engine isn't useful here. Our workload is agent-based simulation (spatial queries, per-agent logic, physics), not ML inference. The GPU is the right accelerator for this kind of work.
+
+*However* — if we later added neural-network brains to boids (instead of direct sensor→thruster weight mappings), Core ML or MLX could potentially run those on the ANE. That's a future consideration, not a starting point.
+
+---
+
+### Option 1: C++ with Metal Compute Shaders (Maximum Performance)
+
+**The most powerful native option on Apple Silicon.**
+
+Metal is Apple's low-level GPU API, and [metal-cpp](https://developer.apple.com/metal/cpp/) provides a header-only C++ wrapper. With Metal 4 (announced WWDC 2025), the API is mature and well-supported.
+
+**Why this is attractive for boids:**
+
+- **Unified memory architecture:** On Apple Silicon, CPU and GPU share the same memory pool. Boid state (positions, velocities, sensor data) lives in one place — no copying between CPU and GPU. This is a *major* advantage for simulations where both CPU logic and GPU compute need the same data.
+- **Compute shaders:** Boid physics, spatial grid updates, and sensor queries can all run as Metal compute shaders on the GPU. Benchmarks show [GPU boids implementations running 42x faster than single-core CPU](https://www.diva-portal.org/smash/get/diva2:1191916/FULLTEXT01.pdf).
+- **Scale:** GPU implementations handle [1 million boids at interactive framerates](https://toytag.net/posts/boids/). Even the M1's 1.36 FP32 TFLOPS is massive overkill for our use case; M4 delivers 2.9 TFLOPS.
+- **Existing examples:** Apple provides N-body simulation sample code in metal-cpp. Several open-source projects demonstrate [scientific C++ computing on M1 GPUs](https://larsgeb.github.io/2022/04/20/m1-gpu.html) and [particle-based fluid simulation via Metal](https://github.com/Al0den/Fluid-Simulator).
+
+**Architecture sketch:**
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    C++ Application                    │
+│  ┌────────────────┐  ┌─────────────────────────────┐ │
+│  │   UI / Window  │  │   Simulation Controller     │ │
+│  │   (AppKit or   │  │   (dispatch compute,        │ │
+│  │    SDL2/GLFW)  │  │    read results, evolve)    │ │
+│  └────────────────┘  └─────────────────────────────┘ │
+│           │                       │                   │
+│           │ render                │ dispatch           │
+│           ▼                       ▼                   │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │              Metal (via metal-cpp)               │ │
+│  │  ┌──────────────┐  ┌──────────────────────────┐ │ │
+│  │  │ Render Pass  │  │   Compute Shaders        │ │ │
+│  │  │ (draw boids) │  │   - Spatial grid build   │ │ │
+│  │  │              │  │   - Neighbour queries     │ │ │
+│  │  │              │  │   - Physics (forces)      │ │ │
+│  │  │              │  │   - Sensor evaluation     │ │ │
+│  │  └──────────────┘  └──────────────────────────┘ │ │
+│  │              Unified Memory (shared buffers)     │ │
+│  └─────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
+```
+
+**Pros:**
+- Maximum performance on Apple Silicon
+- Zero-copy CPU↔GPU data sharing via unified memory
+- Full control over compute pipeline
+- Mature tooling (Xcode, Metal debugger, GPU profiler)
+
+**Cons:**
+- Apple-only (no Windows/Linux)
+- Steeper learning curve than JavaScript
+- Metal Shading Language is its own thing (C++-like but not C++)
+- Windowing/UI requires either AppKit (Objective-C++) or a cross-platform layer like SDL2
+
+---
+
+### Option 2: C++ with Vulkan via MoltenVK (Cross-Platform)
+
+If portability beyond macOS matters, Vulkan is the cross-platform GPU compute/rendering API. [MoltenVK](https://github.com/KhronosGroup/MoltenVK) translates Vulkan calls to Metal on Apple Silicon, and as of August 2025 supports Vulkan 1.4.
+
+**Pros:**
+- Same codebase runs on macOS, Windows, Linux
+- Vulkan compute shaders are well-documented for simulation workloads
+- Large ecosystem of tools and examples
+
+**Cons:**
+- Translation layer adds some overhead vs native Metal
+- Vulkan API is notoriously verbose
+- MoltenVK is "nearly conformant" — occasional edge cases
+
+**Verdict:** Worth considering if you want to share the codebase with non-Mac users, but adds complexity for no performance gain on Apple Silicon.
+
+---
+
+### Option 3: C++ with SpriteKit/Metal Hybrid (Easiest Native Path)
+
+SpriteKit is Apple's 2D game framework, built on Metal. You could use SpriteKit for rendering and Metal compute shaders for the simulation logic.
+
+**Pros:**
+- SpriteKit handles all 2D rendering, camera, batching
+- Metal compute shaders handle the heavy simulation work
+- Less boilerplate than pure Metal rendering
+- Swift or Objective-C++ for app structure, C++ for compute
+
+**Cons:**
+- Apple-only
+- SpriteKit adds constraints — less rendering flexibility than raw Metal
+- Mixing Swift/ObjC++ and C++ can be awkward
+
+---
+
+### Option 4: C++ with CPU-Only Optimization (Simplest, No GPU)
+
+Apple's [Accelerate framework](https://developer.apple.com/accelerate/) provides SIMD-optimized routines for vector math, matrix operations, and DSP — all tuned for Apple Silicon's ARM cores.
+
+For moderate boid counts (hundreds to low thousands), a well-optimized CPU-only implementation using Accelerate's `vDSP` and `simd` types may be fast enough, avoiding GPU complexity entirely.
+
+**Pros:**
+- Simplest architecture — no GPU pipeline to manage
+- Accelerate provides 2-10x speedups via SIMD vectorisation
+- Easy to debug and profile
+- Could use SDL2 or SFML for cross-platform windowing + rendering
+
+**Cons:**
+- Hits a ceiling at high boid counts (tens of thousands)
+- Can't match GPU throughput for embarrassingly parallel workloads
+
+---
+
+### Comparison Summary
+
+| Approach | Performance Ceiling | Portability | Complexity | Best For |
+|----------|-------------------|-------------|------------|----------|
+| **Metal + metal-cpp** | 100K+ boids | Apple only | High | Maximum scale, Apple-focused |
+| **Vulkan + MoltenVK** | 100K+ boids | Cross-platform | Very high | Multi-platform deployment |
+| **SpriteKit + Metal compute** | 100K+ boids | Apple only | Medium | Faster dev, Apple-focused |
+| **CPU + Accelerate** | ~5K boids | Cross-platform (with SDL2) | Low | Quick start, moderate scale |
+| **JavaScript (WebGPU)** | 10K+ boids | Universal (browser) | Medium | Widest reach, good enough perf |
+
+### Neural Engine: Summary
+
+| Question | Answer |
+|----------|--------|
+| Can we program the ANE directly? | No — private API |
+| Can we run simulation logic on it? | No — it only does ML inference |
+| Could neural-net boid brains use it? | Yes, via Core ML or MLX, in the future |
+| Is the GPU sufficient? | Absolutely — M-series GPUs are overkill for this simulation |
+
+### Recommendation
+
+If going native C++, **Option 1 (Metal + metal-cpp)** is the strongest choice for Apple Silicon. The unified memory architecture is a genuine advantage for agent simulations where CPU-side evolution logic and GPU-side physics/spatial computation share the same boid data. Start with compute shaders for physics and spatial queries, render with Metal's render pipeline, and handle evolution/genetics on the CPU side where the branching logic is a natural fit.
+
+That said, the JavaScript/WebGPU path from the main document remains compelling for its zero-install, runs-anywhere nature. The choice depends on whether you prioritise raw performance headroom or accessibility.
+
+---
+
 ## Sources
 
 - [PixiJS v8 Launch Announcement](https://pixijs.com/blog/pixi-v8-launches)
@@ -259,3 +414,18 @@ The original 150-boid simulation will be trivial. With optimization, we can scal
 - [AgentScript ABM Framework](http://agentscript.org/)
 - [BoidsJS Implementation](https://ercang.github.io/boids-js/)
 - [WebGL Boids (GPGPU)](https://github.com/markdaws/webgl-boid)
+- [Getting started with metal-cpp](https://developer.apple.com/metal/cpp/)
+- [Metal Overview - Apple Developer](https://developer.apple.com/metal/)
+- [Metal 4 / What's New in Metal](https://developer.apple.com/metal/whats-new/)
+- [M1 GPUs for C++ science: Getting started](https://larsgeb.github.io/2022/04/20/m1-gpu.html)
+- [Performance Evaluation of Boids on GPU and CPU](https://www.diva-portal.org/smash/get/diva2:1191916/FULLTEXT01.pdf)
+- [GPU Boids at scale](https://toytag.net/posts/boids/)
+- [MoltenVK (Vulkan on Metal)](https://github.com/KhronosGroup/MoltenVK)
+- [State of Vulkan on Apple, Jan 2026](https://www.lunarg.com/the-state-of-vulkan-on-apple-jan-2026/)
+- [Apple Accelerate Framework](https://developer.apple.com/accelerate/)
+- [Apple Neural Engine (community documentation)](https://github.com/hollance/neural-engine)
+- [Core ML Overview](https://developer.apple.com/machine-learning/core-ml/)
+- [Unified Memory on Apple Silicon](https://www.xda-developers.com/apple-silicon-unified-memory/)
+- [Apple Silicon M-Series SoCs for HPC](https://arxiv.org/html/2502.05317v1)
+- [SpriteKit - Apple Developer](https://developer.apple.com/documentation/spritekit/)
+- [Metal Performance Shaders](https://developer.apple.com/documentation/metalperformanceshaders)

@@ -1004,3 +1004,67 @@ Added a "Mutable vs Locked Thruster Geometry" subsection. The key points:
 - Three modes from the same code: **fully locked** (= Model 1), **fully mutable** (full body-plan evolution), and **partially mutable** (e.g. lock one rear thruster, let others evolve)
 - Implementation is trivial: crossover and mutation just skip genes flagged as immutable
 - Enables controlled experiments: get brain evolution working with locked geometry first, then flip to mutable and see what body-plan changes emerge
+
+
+## Human (14)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/toplevel_planner.md]*
+In @toplevel_planner.md please add a section summarising where we've got to so far in the existing planning docs - @plan_newplatform.md, @evolution_theory.md and @boid_theory.md. We'll then use this as a basis for mulling a starting point.
+
+
+## Assistant
+
+Let me read through the current state of all three documents to produce an accurate summary.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/plan_newplatform.md`]*
+
+> **Tool result:**    195→```    196→    197→---    198→    199→## Implementation Phases    200→    201→### Phase 1: Proof of Concept    202→- Canvas 2D rendering (no dependencies)    203→- Single-threaded    204→- 150 ...
+
+
+## Assistant
+
+Now let me re-read the key decision points from evolution_theory.md (I already have the full content from the system reminder).
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/evolution_theory.md`]*
+
+> **Tool result:**    326→## Recommendations for Wild Boids 2.0    327→    328→### Sensory System    329→1. **Start with parametric sectors** rather than full polygons    330→   - Defined by: center angle, width, radius...
+
+
+## Assistant
+
+Good, I have everything I need. Let me write the summary.
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/toplevel_planner.md`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/Code/claude/wildboids/toplevel_planner.md
+
+
+## Assistant
+
+Done. [toplevel_planner.md](toplevel_planner.md) pulls together the state of play across all three documents into:
+
+**"Where We've Got To"** — a concise summary of each document's conclusions:
+- Platform: JS in the browser, custom framework, Canvas 2D → PixiJS progression
+- Evolution: parametric sensors, direct gene encoding, tournament selection + mutation
+- Physics: thrust-based rigid body, Model 2 (genome-defined thrusters with mutability flags), energy system
+
+**"Key Decisions Still Needed"** — the concrete choices before coding:
+- A. How many thrusters to start with (2/3/4), locked or mutable?
+- B. Sensor count and structure
+- C. Genome architecture and size
+- D. World setup (toroidal? food? population sizes?)
+- E. Evolution triggers and rates
+- F. Build order
+
+**"What to Build First"** — a revised phasing that accounts for the thrust model, starting with a physics sandbox (single boid, tune the feel) before adding sensors, brains, or evolution.
+
+Ready to use as a basis for picking a starting point.
