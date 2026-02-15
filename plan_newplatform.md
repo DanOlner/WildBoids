@@ -401,6 +401,462 @@ That said, the JavaScript/WebGPU path from the main document remains compelling 
 
 ---
 
+## Addendum: Loose Coupling and Cross-Platform Graphics in C++
+
+The architecture in [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md) deliberately separates the simulation into layers (sensors → processing network → thrusters → physics) that communicate through simple float arrays. This section extends that principle to the boundary between the **simulation** and **everything the user sees and touches** — rendering, UI controls, graphs — and recommends cross-platform libraries to keep graphics write-once-able.
+
+### The Core Principle: Simulation Knows Nothing About Display
+
+The simulation engine should be a pure library with no graphics dependencies. It takes inputs (time step, world parameters), updates internal state, and exposes read-only state for anyone who wants to look at it. The renderer is a consumer of state, never a producer.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SIMULATION (no GUI deps)                  │
+│                                                             │
+│  World state:  boid positions, velocities, headings,        │
+│                energy, thruster states, sensor activations,  │
+│                species populations, fitness stats            │
+│                                                             │
+│  API:          world.step(dt)                                │
+│                world.getBoidState() → const BoidState*       │
+│                world.getStats() → SimStats                   │
+│                world.setParam(name, value)                   │
+└────────────────────────┬────────────────────────────────────┘
+                         │ reads state (never writes)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    DISPLAY LAYER (all GUI deps)              │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ 2D Renderer  │  │ Parameter UI │  │ Graphs / Plots   │  │
+│  │ (draw boids) │  │ (sliders,    │  │ (fitness, pop    │  │
+│  │              │  │  buttons)    │  │  counts, etc.)   │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**What this buys us:**
+
+- The simulation compiles and runs with **zero graphics libraries** — headless mode for batch experiments, parameter sweeps, overnight evolution runs
+- Swap rendering technology without touching simulation code
+- Test simulation logic with unit tests, no window required
+- GPU compute for simulation (Metal/Vulkan) doesn't conflict with GPU rendering — they're in different compilation units with different dependencies
+
+### Fixed Timestep, Decoupled Frame Rate
+
+The simulation and rendering should run at different rates. The simulation needs a fixed timestep for deterministic physics; the renderer should run as fast as the display allows.
+
+The standard pattern ([Gaffer on Games](https://gafferongames.com/post/fix_your_timestep/)):
+
+```cpp
+double t = 0.0;
+const double dt = 1.0 / 120.0;  // simulation at 120Hz
+double accumulator = 0.0;
+
+while (running) {
+    double frameTime = getElapsedTime();
+    accumulator += frameTime;
+
+    // Fixed-step simulation updates
+    while (accumulator >= dt) {
+        world.step(dt);
+        accumulator -= dt;
+        t += dt;
+    }
+
+    // Render at whatever rate the display wants
+    double alpha = accumulator / dt;  // for interpolation
+    renderer.draw(world, alpha);
+    ui.draw(world);
+}
+```
+
+The simulation can also run **without any rendering at all** — just call `world.step(dt)` in a tight loop. This is essential for running evolution experiments at maximum speed where you don't care about visuals.
+
+---
+
+### Cross-Platform Graphics Library Options
+
+For a few hundred boids and a parameter interface, the graphics are simple: draw coloured triangles/arrows for boids, draw sensor cones/arcs, draw UI controls and graphs. We don't need a 3D engine. We need something that handles windowing, basic 2D rendering, and UI — and works on macOS, Windows, and Linux without rewriting.
+
+#### Option 1: SDL3 + Dear ImGui + ImPlot (Recommended)
+
+**[SDL3](https://wiki.libsdl.org/SDL3/CategoryGPU)** — the successor to SDL2, released stable January 2025 (SDL 3.2.0), actively maintained through 2026 (3.2.30+).
+
+SDL3's headline feature is the **SDL_GPU API**: a unified graphics abstraction that natively targets **Metal** (macOS), **Vulkan** (Linux, Windows), and **DirectX 12** (Windows). You write one rendering path; SDL3 picks the right backend. For our 2D boid rendering, `SDL_RenderGeometry` handles triangles, lines, and shapes with hardware acceleration.
+
+**[Dear ImGui](https://github.com/ocornut/imgui)** — immediate-mode GUI for C++. Provides sliders, buttons, checkboxes, text inputs, collapsible panels — all the parameter controls we need. Has native SDL3 backends (`imgui_impl_sdl3.cpp` + `imgui_impl_sdlgpu3.cpp`). Integrates in ~20 lines of setup code.
+
+**[ImPlot](https://github.com/epezent/implot)** — GPU-accelerated plotting for Dear ImGui. Real-time line graphs, scatter plots, histograms. Can plot tens of thousands of points smoothly. Perfect for fitness-over-generations, population counts, energy distributions, genome diversity metrics.
+
+**Why this combination:**
+
+- **Genuinely cross-platform:** SDL3's GPU API handles Metal/Vulkan/DX12 automatically. Write once, runs on macOS (Apple Silicon), Windows, Linux.
+- **SDL3 is the future:** SDL2 is in maintenance mode. All new projects should use SDL3.
+- **Dear ImGui + ImPlot** give us the full parameter/analysis UI with minimal effort. No need for a heavy GUI framework (Qt, wxWidgets) — ImGui is immediate-mode, header-only, and renders via SDL3's own backend.
+- **Low coupling:** SDL3 is a C library called from a thin C++ wrapper. It doesn't infect the rest of the codebase with its types or patterns.
+- **Coexists with Metal/Vulkan compute:** SDL3 handles the rendering window and 2D drawing; Metal compute shaders (or Vulkan compute) can run the simulation in separate command buffers on the same GPU. Unified memory on Apple Silicon means no data copying between compute and rendering.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                     Application                            │
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  Simulation Engine (pure C++, no deps)              │   │
+│  │  - Boid state, NEAT networks, evolution, physics    │   │
+│  │  - Optional: Metal/Vulkan compute for spatial grid  │   │
+│  └───────────────────────┬─────────────────────────────┘   │
+│                          │ const state reference            │
+│  ┌───────────────────────▼─────────────────────────────┐   │
+│  │  Display Layer (SDL3 + ImGui + ImPlot)              │   │
+│  │  - SDL3 window + GPU rendering (Metal/Vulkan/DX12) │   │
+│  │  - SDL3 2D drawing: boid shapes, sensor arcs        │   │
+│  │  - ImGui: parameter sliders, species controls       │   │
+│  │  - ImPlot: fitness graphs, population charts        │   │
+│  └─────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────┘
+```
+
+#### Option 2: SFML 3 + Dear ImGui + ImPlot (Simpler, C++ Native)
+
+**[SFML 3](https://www.sfml-dev.org/)** — released December 2024 (3.0.0), uses C++17, batteries-included 2D graphics library. SFML feels more naturally C++ than SDL (which is a C library). Has built-in 2D drawing primitives, sprite rendering, text, views/cameras.
+
+**Pros over SDL3:**
+- More idiomatic C++ API — no C-style function calls
+- Built-in 2D primitives (circles, rectangles, convex shapes, vertex arrays) — no need for manual triangle submission
+- Easier to get started; less boilerplate
+
+**Cons vs SDL3:**
+- Uses OpenGL under the hood, not Metal/Vulkan/DX12 natively. On macOS, this means OpenGL 4.1 (Apple's last supported version). Adequate for our simple 2D rendering, but less future-proof.
+- Narrower platform support (no mobile, no consoles — not that we need them)
+- [ImGui-SFML](https://github.com/SFML/imgui-sfml) binding exists but is a third-party layer
+
+**Verdict:** If you want the most pleasant C++ development experience and don't care about native Metal rendering for the *display* (Metal compute for simulation is separate), SFML 3 is excellent. The OpenGL-on-macOS limitation is irrelevant for drawing a few hundred triangles.
+
+#### Option 3: Raylib (Fastest to Prototype)
+
+**[Raylib](https://www.raylib.com/)** — radically simple C library for games and visualizations. Follows the KISS principle. A boid renderer in raylib is about 30 lines of code.
+
+**Pros:**
+- Lowest learning curve of any option
+- Comprehensive 2D drawing functions built in
+- Cross-platform (macOS, Windows, Linux, even WebAssembly)
+- Single-header-ish simplicity
+
+**Cons:**
+- Less suitable for complex UI (no native ImGui integration, though third-party bindings exist)
+- OpenGL-based (same macOS caveat as SFML)
+- Smaller ecosystem than SDL3
+
+**Verdict:** Best for "get something on screen today." Could be a good choice for early prototyping before committing to SDL3 for the final version.
+
+### Library Comparison
+
+| Feature | SDL3 + ImGui | SFML 3 + ImGui | Raylib |
+|---------|-------------|---------------|--------|
+| **macOS (Metal backend)** | Yes (native) | No (OpenGL) | No (OpenGL) |
+| **Windows (DX12/Vulkan)** | Yes (native) | No (OpenGL) | No (OpenGL) |
+| **Linux (Vulkan)** | Yes (native) | No (OpenGL) | No (OpenGL) |
+| **2D drawing ease** | Moderate (geometry API) | Easy (built-in shapes) | Very easy |
+| **ImGui integration** | Official backends | Third-party (ImGui-SFML) | Third-party |
+| **ImPlot (graphs)** | Yes (via ImGui) | Yes (via ImGui) | Manual |
+| **API style** | C with C++ wrappers | Native C++ | C |
+| **Future-proof** | Most (SDL3 is actively evolving) | Good | Good |
+| **Coexists with Metal compute** | Yes (same GPU, shared context) | Awkward (OpenGL ≠ Metal) | Awkward |
+| **Actively maintained (2026)** | Yes | Yes | Yes |
+| **Learning curve** | Moderate | Easy | Very easy |
+
+### What About Qt / wxWidgets / Native GUI?
+
+Heavy GUI frameworks like Qt are overkill here. They bring massive dependencies, complex build systems, and licensing considerations. Dear ImGui gives us everything we need for simulation controls in a fraction of the complexity. If we later want a polished standalone application, we could revisit — but for a simulation tool, ImGui is the standard choice.
+
+### Do We Need ECS?
+
+[Entity Component Systems](https://en.wikipedia.org/wiki/Entity_component_system) (like [EnTT](https://github.com/skypjack/entt) or [Flecs](https://github.com/SanderMertens/flecs)) are popular in game engines for managing entities with varying component sets. For Wild Boids:
+
+**Probably not.** We have two entity types (predator, prey) with nearly identical component structures (position, velocity, brain, sensors, thrusters, energy). A simple array of `Boid` structs with a type flag is cleaner than an ECS for this use case. ECS shines when you have dozens of entity types with varying component combinations — not our situation.
+
+If we later add many entity types (food sources, obstacles, environmental features, multiple prey species with different sensor configurations), ECS could become worthwhile. But starting with plain C++ classes and arrays is simpler and faster to develop.
+
+### Recommendation
+
+**SDL3 + Dear ImGui + ImPlot** is the strongest cross-platform option. SDL3's native Metal/Vulkan/DX12 backends mean we write one rendering path that uses the best graphics API on each platform. Dear ImGui + ImPlot give us simulation controls and real-time graphs with minimal code. And the simulation engine stays completely decoupled — it's pure C++ with no knowledge of SDL, ImGui, or any display technology.
+
+The build structure would look like:
+
+```
+wildboids/
+├── src/
+│   ├── simulation/        ← Pure C++, no graphics deps
+│   │   ├── world.h/cpp
+│   │   ├── boid.h/cpp
+│   │   ├── rigid_body.h/cpp
+│   │   ├── neat_network.h/cpp
+│   │   ├── sensors.h/cpp
+│   │   ├── thrusters.h/cpp
+│   │   ├── evolution.h/cpp
+│   │   └── spatial_grid.h/cpp
+│   │
+│   ├── display/           ← SDL3 + ImGui + ImPlot
+│   │   ├── renderer.h/cpp
+│   │   ├── ui_controls.h/cpp
+│   │   └── plots.h/cpp
+│   │
+│   └── main.cpp           ← Wires simulation + display together
+│
+├── compute/               ← Metal/Vulkan compute shaders (optional)
+│   ├── spatial_grid.metal
+│   └── physics.metal
+│
+└── tests/                 ← Test simulation without any display
+    ├── test_physics.cpp
+    ├── test_neat.cpp
+    └── test_evolution.cpp
+```
+
+The `simulation/` directory compiles independently. The `display/` directory depends on SDL3/ImGui but never on simulation internals — it reads `const BoidState*` and `SimStats`. Tests run the simulation headless at full speed.
+
+---
+
+## Addendum: Data Collection, Analysis and Boid Import/Export
+
+### 1. Data Collection and Analysis Framework
+
+#### Design Principle
+
+Data collection follows the same decoupling principle as graphics: the simulation produces structured state; a separate data layer reads it. The simulation never knows it's being observed.
+
+```
+┌──────────────┐       const BoidState*        ┌──────────────────────┐
+│  Simulation  │ ──────────────────────────────►│   DataCollector      │
+│  (world.h)   │       const SimStats           │                      │
+│              │ ──────────────────────────────►│   - per-tick metrics │
+└──────────────┘                                │   - time-series      │
+                                                │   - export to CSV    │
+                                                │   - export to JSON   │
+                                                └──────────────────────┘
+```
+
+`DataCollector` sits alongside `Renderer` in the main loop — both consume const simulation state, neither modifies it.
+
+#### What to Measure
+
+**Per-boid instantaneous state:**
+| Metric | Source | Purpose |
+|--------|--------|---------|
+| Position (x, y) | Physics | Spatial distribution, territory mapping |
+| Velocity (vx, vy), speed | Physics | Movement patterns |
+| Heading | Physics | Alignment detection |
+| Energy level | Boid state | Survival fitness proxy |
+| Age (ticks alive) | Boid state | Longevity tracking |
+| Species ID | NEAT speciation | Lineage tracking |
+| Genome complexity (node/connection count) | Genome | Bloat monitoring |
+
+**Population-level metrics (computed per tick or at intervals):**
+| Metric | Computation | Detects |
+|--------|-------------|---------|
+| **Average alignment** | Mean of `cos(heading_i - heading_j)` for nearest neighbours | Proto-flocking, coordinated movement |
+| **Clustering coefficient** | Count of boids within radius R of each boid, averaged | Schooling, herding, group formation |
+| **Nearest-neighbour distance** (mean, std) | Spatial query | Spacing regularity, personal space |
+| **Velocity correlation** | Pearson correlation of velocities within radius R | Coordinated acceleration/turning |
+| **Species population counts** | Count per species ID | Speciation dynamics, competitive exclusion |
+| **Mean genome complexity** | Avg nodes + connections per species | Structural evolution rate, bloat detection |
+| **Predator catch rate** | Catches per predator per N ticks | Predator fitness over time |
+| **Prey survival rate** | Proportion surviving past age threshold | Prey evasion effectiveness |
+| **Spatial entropy** | Grid-based Shannon entropy of boid positions | Uniform spread vs. clumping |
+
+Many of these are cheap to compute from data already maintained by the spatial partitioning grid.
+
+#### Time-Series Storage
+
+```cpp
+struct MetricSnapshot {
+    uint64_t tick;
+    float avgAlignment;
+    float clusteringCoefficient;
+    float meanNNDistance;
+    float spatialEntropy;
+    // ... per-species counts stored separately
+};
+
+class DataCollector {
+public:
+    void sample(const World& world);       // called every N ticks
+    void exportCSV(const std::string& path) const;
+    void exportJSON(const std::string& path) const;
+
+    // Ring buffer or vector depending on run length
+    std::vector<MetricSnapshot> timeSeries;
+
+    // Configurable sample rate (every tick is expensive for long runs)
+    int sampleInterval = 10;  // every 10th tick
+};
+```
+
+#### Live Visualisation (via ImPlot)
+
+Because ImPlot is already in the recommended display stack, live time-series plots come almost free:
+
+- Scrolling line plots of alignment, clustering, species counts
+- Scatter plot of boid positions coloured by species or energy
+- Histogram of genome complexity across population
+- All plotting reads from `DataCollector`'s time-series buffer — no simulation dependency
+
+#### Export Formats
+
+- **CSV**: One row per snapshot tick, columns for each metric. Importable into R, Python/pandas, Excel. Best for statistical analysis.
+- **JSON**: Richer structure, can include per-boid detail at specific ticks. Best for replaying / visualising specific moments.
+
+---
+
+### 2. Boid Import/Export (JSON)
+
+#### Purpose
+
+Serialise an entire boid — its genome, current state, and network topology — to human-readable JSON. This enables:
+
+- **Saving/loading interesting specimens** mid-run
+- **Seeding new simulations** with evolved boids from previous runs
+- **Visualising the extended phenotype** — the sensor layout, network wiring, thruster arrangement — in external tools (e.g. a web-based genome viewer, or Python/networkx graph plots)
+- **Comparing genomes** across evolutionary runs
+- **Archiving "champion" boids** with full provenance
+
+#### JSON Schema
+
+Based on the genome structure defined in [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md):
+
+```json
+{
+  "version": "1.0",
+  "type": "prey",
+  "generation": 247,
+  "speciesId": 12,
+  "fitness": 8340.5,
+
+  "sensors": [
+    {
+      "id": 0,
+      "centerAngleDeg": 0.0,
+      "arcWidthDeg": 60.0,
+      "maxRange": 150.0,
+      "entityFilter": "prey",
+      "signalType": "nearestDistance"
+    },
+    {
+      "id": 1,
+      "centerAngleDeg": 45.0,
+      "arcWidthDeg": 90.0,
+      "maxRange": 200.0,
+      "entityFilter": "predator",
+      "signalType": "sectorDensity"
+    }
+  ],
+
+  "network": {
+    "nodes": [
+      { "id": 0, "type": "input",  "label": "sensor_0" },
+      { "id": 1, "type": "input",  "label": "sensor_1" },
+      { "id": 5, "type": "hidden", "bias": 0.12, "activationFn": "tanh" },
+      { "id": 6, "type": "modulatory", "bias": -0.3, "activationFn": "sigmoid" },
+      { "id": 10, "type": "output", "label": "thruster_0" },
+      { "id": 11, "type": "output", "label": "thruster_1" }
+    ],
+    "connections": [
+      {
+        "innovation": 1,
+        "source": 0,
+        "target": 5,
+        "weight": 0.72,
+        "enabled": true,
+        "plasticity": {
+          "alpha": 0.3,
+          "eta": 0.01,
+          "A": 1.0, "B": 0.0, "C": 0.0, "D": 0.0
+        }
+      },
+      {
+        "innovation": 7,
+        "source": 5,
+        "target": 10,
+        "weight": -0.45,
+        "enabled": true,
+        "plasticity": {
+          "alpha": 0.0,
+          "eta": 0.0,
+          "A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0
+        }
+      }
+    ]
+  },
+
+  "thrusters": [
+    {
+      "id": 0,
+      "positionX": 0.3,
+      "positionY": 0.0,
+      "fireAngleDeg": 180.0,
+      "maxThrust": 50.0
+    },
+    {
+      "id": 1,
+      "positionX": -0.3,
+      "positionY": 0.0,
+      "fireAngleDeg": 180.0,
+      "maxThrust": 50.0
+    }
+  ]
+}
+```
+
+#### Key Design Choices
+
+- **Human-readable.** Anyone can open the file and see that sensor 1 is a 90° arc looking for predators at 45° to the right. The network wiring is explicit — you can trace signal flow by hand.
+- **`alpha: 0.0` means "no plasticity."** When plasticity parameters are all zero, the connection behaves as a standard fixed-weight connection. This makes the JSON self-documenting: you can immediately see which connections learn and which are static.
+- **Modulatory neurons are labelled.** You can see the neuromodulatory architecture at a glance.
+- **Innovation numbers preserved.** Enables crossover between imported boids and the current population — genomes stay NEAT-compatible.
+- **Runtime state excluded.** `plasticWeight` is not serialised because it resets to 0 each generation. If lifetime state needs saving (e.g. for mid-run snapshots), it can go in an optional `"runtimeState"` block.
+
+#### Implementation
+
+```cpp
+// Serialisation uses nlohmann/json (header-only, de facto C++ standard)
+#include <nlohmann/json.hpp>
+
+namespace BoidIO {
+    nlohmann::json toJSON(const Boid& boid);
+    Boid fromJSON(const nlohmann::json& j);
+
+    void saveToFile(const Boid& boid, const std::string& path);
+    Boid loadFromFile(const std::string& path);
+
+    // Batch export/import for entire populations
+    void savePopulation(const std::vector<Boid>& pop, const std::string& path);
+    std::vector<Boid> loadPopulation(const std::string& path);
+}
+```
+
+[nlohmann/json](https://github.com/nlohmann/json) is header-only, widely used, and provides direct struct-to-JSON mapping via `NLOHMANN_DEFINE_TYPE_INTRUSIVE` macros — minimal boilerplate.
+
+#### Visualising the Extended Phenotype
+
+With boids exported to JSON, external tools can render the phenotype:
+
+- **Sensor layout**: Draw the arc sectors around a boid silhouette, colour-coded by entity filter and signal type
+- **Network graph**: Render the NEAT network as a directed graph (nodes positioned by layer, connections coloured by weight sign, thickness by magnitude, dashed if plastic)
+- **Thruster layout**: Show thruster positions and fire directions on the boid body
+- **Combined view**: Overlay all three — a complete picture of how a boid perceives, thinks, and moves
+
+This could be a lightweight web page using D3.js or similar, reading the JSON directly — entirely independent of the C++ simulation.
+
+#### Extended Usage
+
+- **Population snapshots**: Export entire populations at generation milestones to track macro-evolution
+- **Cross-run seeding**: Load champion boids from run A into run B's initial population to test robustness
+- **Comparative analysis**: Diff two boid JSONs to see exactly how genomes diverged (which connections were added/removed, how plasticity parameters shifted)
+- **Reproducibility**: Archive initial population JSON + RNG seed = fully reproducible evolutionary run
+
+---
+
 ## Sources
 
 - [PixiJS v8 Launch Announcement](https://pixijs.com/blog/pixi-v8-launches)
@@ -429,3 +885,18 @@ That said, the JavaScript/WebGPU path from the main document remains compelling 
 - [Apple Silicon M-Series SoCs for HPC](https://arxiv.org/html/2502.05317v1)
 - [SpriteKit - Apple Developer](https://developer.apple.com/documentation/spritekit/)
 - [Metal Performance Shaders](https://developer.apple.com/documentation/metalperformanceshaders)
+- [SDL3 GPU API](https://wiki.libsdl.org/SDL3/CategoryGPU)
+- [SDL3 Official Release](https://www.phoronix.com/news/SDL3-Official-Release)
+- [SDL2 Maintenance Mode](https://www.phoronix.com/news/SDL2-To-Maintenance-Mode)
+- [SFML 3.0 Release](https://www.sfml-dev.org/)
+- [Dear ImGui](https://github.com/ocornut/imgui)
+- [Dear ImGui Backends](https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md)
+- [ImPlot — GPU-Accelerated Plotting for Dear ImGui](https://github.com/epezent/implot)
+- [ImGui-SFML Binding](https://github.com/SFML/imgui-sfml)
+- [Raylib](https://www.raylib.com/)
+- [Fix Your Timestep! (Gaffer on Games)](https://gafferongames.com/post/fix_your_timestep/)
+- [EnTT — Entity Component System](https://github.com/skypjack/entt)
+- [Flecs — Fast and Lightweight ECS](https://github.com/SanderMertens/flecs)
+- [Component Pattern (Game Programming Patterns)](https://gameprogrammingpatterns.com/component.html)
+- [nlohmann/json — JSON for Modern C++](https://github.com/nlohmann/json)
+- [D3.js — Data-Driven Documents](https://d3js.org/)

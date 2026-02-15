@@ -228,9 +228,41 @@ Sensors (5-8)  →  Hidden (4-8 nodes)  →  Thrusters (3-4)
    - *Add connection:* new link between two previously unconnected nodes
    - *Add node:* split an existing connection, inserting a node in between
 
+   > **When do structural mutations happen? And can networks shrink?**
+   >
+   > Structural mutations are **purely random**, with fixed probabilities per genome per generation. In the original paper: ~3% chance of adding a node, ~5% chance of adding a connection (higher in larger populations). There's no fitness-based trigger — the mutation fires or it doesn't, and selection determines whether the result survives.
+   >
+   > **In original NEAT, networks can only grow, not shrink.** There is no "delete node" or "delete connection" mutation. Connections can be *disabled* (via a toggle mutation at ~1% rate), and disabled connections have a 25% chance of being re-enabled during crossover. But a disabled connection still exists in the genome — it's dormant, not removed. The genome is append-only.
+   >
+   > This raises an obvious concern: **won't networks bloat indefinitely?** In original NEAT, the answer is "somewhat, yes." The intended safeguards are indirect:
+   >
+   > - **Starting minimal** means there's nothing to bloat initially — complexity must earn its place
+   > - **Speciation + fitness sharing** means bloated offspring that drift into a new species must outperform their leaner ancestors to survive
+   > - **Selection pressure** culls networks where added structure doesn't improve fitness
+   >
+   > But these are soft constraints. Research has shown that when NEAT hits a fitness plateau, the downward pressure on complexity weakens — there's no fitness *improvement* to select for, so structural mutations accumulate without being selected against. One study found original NEAT [continuously growing to ~13 hidden nodes with ~45 added connections](https://www.cs.swarthmore.edu/~meeden/cs81/s12/papers/DasolEmilyPaper.pdf) on benchmarks where simpler solutions exist.
+   >
+   > **Do networks "settle down"?** Not automatically. Structural mutations keep firing at their fixed probabilities forever. In practice, networks reach phases where most structural mutations are neutral or harmful and get selected against — but the mutations don't *stop*; they just mostly fail to propagate. If the population reaches a fitness plateau, complexity can drift upward unchecked.
+   >
+   > **Modern NEAT variants fix this.** [SharpNEAT](https://sharpneat.sourceforge.io/phasedsearch.html) (Colin Green) introduced **phased searching**: the algorithm alternates between complexification mode (normal NEAT) and pruning mode, where additive mutations are disabled and deletion mutations are enabled. Connections are randomly removed; if this strands a neuron (no remaining inputs or outputs), the neuron is deleted too. The result is an oscillating complexity profile — grow, prune, grow, prune — that explores complex topologies without permanent bloat. [NEAT-Python](https://neat-python.readthedocs.io/en/latest/neat_overview.html) similarly adds configurable `node_delete_prob` and `conn_delete_prob` parameters.
+   >
+   > **For Wild Boids, we should implement pruning from the start** — either SharpNEAT-style phased searching or simple deletion mutations alongside additions. Our boid brains should be small (10–25 nodes), and pruning prevents them from accumulating structural dead weight over long evolutionary runs.
+
 3. **Historical markings.** Every new gene (connection) gets a globally unique *innovation number*. This solves the alignment problem during crossover — genes with matching innovation numbers correspond to the same structural element and can be crossed over meaningfully.
 
 4. **Speciation.** Networks are grouped into species by structural similarity. Individuals compete primarily within their species, protecting new innovations from being immediately outcompeted by established topologies.
+
+   > **Why do innovations need "protection"? Isn't surviving competition the whole point of evolution?**
+   >
+   > Yes — but there's a timing problem specific to *topology* mutations (as opposed to weight mutations). When NEAT adds a new hidden node by splitting an existing connection, the new node starts with essentially random or neutral weights. It hasn't had time to *optimise* those weights yet. In the generation it appears, it almost certainly performs *worse* than the established topology it's competing against, because the existing simpler networks have had many generations to tune their weights.
+   >
+   > This is the **problem of conventions** (also called the **competing conventions problem**). A structural innovation that *would* be beneficial after 10–20 generations of weight tuning gets killed in generation 1 because it's competing against already-tuned networks. Without speciation, NEAT degenerates into fixed-topology weight evolution — structural mutations appear and are immediately eliminated, so complexity never increases.
+   >
+   > The biological analogy: imagine a mutation that gives an animal a new organ (say, a proto-eye). The proto-eye is initially useless — it's metabolically expensive and provides no survival advantage until supporting neural circuitry co-evolves to process its signals. In a population where every individual competes directly against every other, the proto-eye carrier is just a less-efficient version of its eyeless competitors. But if proto-eye carriers are somewhat isolated (geographically, ecologically), they get time to refine the organ before competing with the wider population. This is essentially what speciation does in NEAT — it's analogous to [allopatric speciation](https://en.wikipedia.org/wiki/Allopatric_speciation) in biology, where geographic isolation allows divergent adaptations to develop.
+   >
+   > Stanley & Miikkulainen tested this directly: NEAT without speciation solved their benchmark (double pole balancing) only [20% of the time and took 8.5× more evaluations when it did succeed](https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf). The original paper explicitly identifies this as one of NEAT's three key contributions, arguing that "weights of a new structure are unlikely to be optimized right away" and that speciation provides the "breathing room" needed. [Lehman et al. (2008)](https://eplex.cs.ucf.edu/papers/lehman_gecco08.pdf) further confirmed that speciation is critical for maintaining population diversity and preventing premature convergence to local optima.
+   >
+   > It's worth noting: this is less of a problem for *weight-only* evolution (like Option A above), where every genome has the same topology and mutations are incremental adjustments to existing parameters. It's specifically the *structural* mutations — adding nodes and connections — that need this grace period. A weight perturbation either helps or it doesn't, immediately. A new hidden node needs time to find its role.
 
 5. **Complexification.** Networks only grow when complexity helps. If a simple direct sensor→thruster mapping is sufficient, NEAT will keep it simple. Hidden nodes and recurrent connections emerge only when they improve fitness.
 
@@ -457,6 +489,8 @@ Per-frame, each modulatory neuron is just one extra activation calculation. The 
 ```
 
 Steps 2 and 3 can be combined in a single pass through the network. The plasticity update uses activations computed in step 2.
+
+> **Speed control and observation.** Because each `world.step(dt)` always advances by the same fixed `dt` regardless of wall-clock time, the simulation is trivially speed-controllable from the outside. The main loop uses a [fixed timestep accumulator](https://gafferongames.com/post/fix_your_timestep/) that drains accumulated real time in fixed-size chunks. To slow down for observation, cap how many steps drain per frame (`maxStepsPerFrame = 1` for real-time, uncapped for fast-forward). To pause, stop draining. None of this affects simulation determinism — the boid update pipeline above doesn't know or care how fast it's being called. See the Loose Coupling section in [plan_newplatform.md](plan_newplatform.md) for the full accumulator pattern.
 
 ### Network Activation (Pseudocode)
 
