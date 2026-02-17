@@ -538,3 +538,168 @@ Boid::~Boid() = default;    // Generated destructor, but here where types are co
 | Refactor freely, IDE resolves everything | Header dependencies matter, forward-declare to decouple |
 | Copy is cheap (just a reference) | Copy can be expensive (deep copy), understand move semantics |
 | `final` prevents reassignment | `const` prevents mutation, and it's infectious (and useful) |
+
+---
+
+## 5. Development Setup: VS Code on macOS (Apple Silicon)
+
+### 5.1 What You Already Have
+
+Your Mac already has:
+- **Apple Clang 17** (`clang++`) — a full C++20 compiler, installed via Xcode Command Line Tools. This is your compiler; you don't need to install gcc.
+- **Homebrew** — for installing everything else.
+
+### 5.2 What You Need to Install
+
+**Build tools (via Homebrew):**
+
+```bash
+brew install cmake ninja
+```
+
+- **CMake** — the build system generator. Reads `CMakeLists.txt`, produces build files.
+- **Ninja** — a fast build executor. CMake can generate Makefiles, but Ninja is significantly faster for incremental builds. CMake + Ninja is the standard pairing.
+
+**VS Code extensions (install from the Extensions panel or command line):**
+
+```bash
+code --install-extension llvm-vs-code-extensions.vscode-clangd
+code --install-extension ms-vscode.cmake-tools
+code --install-extension twxs.cmake
+```
+
+| Extension | What it does |
+|-----------|-------------|
+| **clangd** | C++ language intelligence — autocomplete, go-to-definition, errors, refactoring. Far better than Microsoft's C/C++ extension for navigation and diagnostics. Uses the same Clang compiler you're building with. |
+| **CMake Tools** | Integrates CMake into VS Code — configure, build, select build type (Debug/Release), pick compiler, run targets, all from the status bar and command palette. |
+| **CMake** (twxs) | Syntax highlighting and autocomplete for `CMakeLists.txt` files. |
+
+**Optional but recommended:**
+
+```bash
+code --install-extension vadimcn.vscode-lldb
+```
+
+| Extension | What it does |
+|-----------|-------------|
+| **CodeLLDB** | Debugger integration. Set breakpoints, inspect variables, step through code — all in VS Code. Uses LLDB, which is the debugger that ships with Apple's toolchain. |
+
+### 5.3 How It Fits Together
+
+Once installed, the workflow is:
+
+**1. Create a `CMakeLists.txt`** in the project root (we'll do this when we start coding).
+
+**2. CMake Tools auto-detects it.** When you open the folder in VS Code, CMake Tools will prompt you to configure. Select:
+- **Kit:** "Clang" (it will find Apple Clang automatically)
+- **Build type:** "Debug" (for development; switch to Release for performance testing)
+- **Generator:** Ninja (CMake Tools will use it if installed)
+
+**3. The status bar** shows build controls:
+- Click "Build" (or `Cmd+Shift+B`) to compile. Only changed files recompile.
+- Click the target name to switch between building the main binary, tests, etc.
+- Click "Debug" / play button to run with the debugger attached.
+
+**4. clangd provides IntelliSense** by reading the `compile_commands.json` that CMake generates. This gives you:
+- Accurate autocomplete (knows your types, your includes, everything)
+- Go-to-definition (`Cmd+Click`) — works across headers and source files
+- Real-time error squiggles as you type
+- Rename symbol, find all references, etc.
+
+To make clangd work, add this to your CMakeLists.txt:
+
+```cmake
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+```
+
+This generates the `compile_commands.json` that clangd reads. CMake Tools usually handles this automatically, but it's good to have it explicit.
+
+### 5.4 The Edit-Compile-Test Cycle in Practice
+
+```
+1.  Edit src/simulation/neat_network.cpp in VS Code
+2.  Cmd+Shift+B → Ninja rebuilds just that file (~0.5s)
+3.  Run tests:
+    - From terminal: cmake --build build --target test
+    - Or click the test target in CMake Tools
+    - Or use the Testing panel if using CTest integration
+4.  If a test segfaults, it will say "signal 11" and stop.
+    Re-run with sanitizers enabled (your Debug build should have them on by default).
+5.  clangd shows you errors as you type — many bugs caught before you even compile.
+```
+
+### 5.5 Recommended VS Code Settings
+
+Add to `.vscode/settings.json` in the project:
+
+```json
+{
+    "cmake.generator": "Ninja",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureOnOpen": true,
+    "clangd.arguments": [
+        "--background-index",
+        "--clang-tidy",
+        "--header-insertion=iwyu"
+    ],
+    "editor.formatOnSave": true,
+    "C_Cpp.intelliSenseEngine": "disabled"
+}
+```
+
+Notes:
+- `"C_Cpp.intelliSenseEngine": "disabled"` — disables Microsoft's C++ IntelliSense so it doesn't fight with clangd. Only needed if you also have the Microsoft C/C++ extension installed.
+- `--clang-tidy` — enables lint warnings in clangd (catches common mistakes).
+- `--header-insertion=iwyu` — suggests missing `#include`s automatically.
+
+### 5.6 Debugging
+
+With CodeLLDB installed, add a `.vscode/launch.json`:
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug wildboids",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/wildboids",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/wildboids_tests",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
+```
+
+Then hit `F5` to run with breakpoints, variable inspection, and step-through — very similar to debugging Java in IntelliJ/Eclipse.
+
+### 5.7 What You Don't Need
+
+- **Xcode** (the full IDE) — not needed. The command line tools you already have are sufficient. Xcode is a 12GB download you can skip.
+- **Microsoft C/C++ extension** — clangd is better for code intelligence. Don't install both.
+- **gcc/g++** — Apple Clang handles everything. Installing gcc via Homebrew is unnecessary unless you hit a Clang-specific edge case (unlikely).
+- **Valgrind** — doesn't run on Apple Silicon. Use sanitizers instead (ASan, UBSan), which are built into Clang and work natively. They're actually better for day-to-day use anyway.
+
+### 5.8 Summary: What to Install
+
+```bash
+# Build tools
+brew install cmake ninja
+
+# VS Code extensions
+code --install-extension llvm-vs-code-extensions.vscode-clangd
+code --install-extension ms-vscode.cmake-tools
+code --install-extension twxs.cmake
+code --install-extension vadimcn.vscode-lldb
+```
+
+That's it. After this, open the project folder in VS Code, write a `CMakeLists.txt`, and you're developing C++ with full IDE support.

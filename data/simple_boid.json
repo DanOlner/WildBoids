@@ -1,0 +1,45 @@
+{
+    "version": "0.1",
+    "type": "prey",
+    "mass": 1.0,
+    "momentOfInertia": 0.5,
+    "initialEnergy": 100.0,
+    "thrusters": [
+        {
+            "id": 0,
+            "label": "rear",
+            "positionX": 0.0,
+            "positionY": -0.5,
+            "directionX": 0.0,
+            "directionY": 1.0,
+            "maxThrust": 50.0
+        },
+        {
+            "id": 1,
+            "label": "left_rear",
+            "positionX": -0.3,
+            "positionY": -0.4,
+            "directionX": 1.0,
+            "directionY": 0.0,
+            "maxThrust": 20.0
+        },
+        {
+            "id": 2,
+            "label": "right_rear",
+            "positionX": 0.3,
+            "positionY": -0.4,
+            "directionX": -1.0,
+            "directionY": 0.0,
+            "maxThrust": 20.0
+        },
+        {
+            "id": 3,
+            "label": "front",
+            "positionX": 0.0,
+            "positionY": 0.5,
+            "directionX": 0.0,
+            "directionY": -1.0,
+            "maxThrust": 15.0
+        }
+    ]
+}

@@ -857,6 +857,315 @@ This could be a lightweight web page using D3.js or similar, reading the JSON di
 
 ---
 
+## Addendum: Command Line Interface and GUI/CLI Parameter Parity
+
+### The Problem
+
+The simulation should run in two modes:
+
+1. **GUI mode** — SDL3 window, ImGui controls, visual feedback, interactive parameter tweaking
+2. **Headless/CLI mode** — no window, no graphics dependencies, maximum speed, scriptable
+
+Both modes need to accept the same inputs: starting populations, world parameters, evolution settings, run duration, output options. A parameter that exists as an ImGui slider should also be settable from the command line, and vice versa. We don't want two separate codebases for "what can be configured."
+
+### Single Source of Truth: SimConfig
+
+Define all configurable parameters in one struct that has no GUI or CLI dependencies:
+
+```cpp
+// simulation/sim_config.h — pure C++, no SDL/ImGui includes
+
+struct WorldConfig {
+    float width = 1000.0f;
+    float height = 1000.0f;
+    bool  toroidal = true;
+    float dt = 1.0f / 120.0f;
+};
+
+struct PopulationConfig {
+    int   predatorCount = 30;
+    int   preyCount = 120;
+    float initialEnergy = 100.0f;
+};
+
+struct EvolutionConfig {
+    int   generationTicks = 6000;
+    float mutationRate = 0.3f;
+    float crossoverRate = 0.75f;
+    int   speciesTarget = 10;
+    float compatibilityThreshold = 3.0f;
+};
+
+struct RunConfig {
+    int   maxGenerations = 0;     // 0 = run forever (GUI), required for CLI
+    int   snapshotInterval = 50;  // save population every N generations
+    uint64_t rngSeed = 0;        // 0 = use random seed
+};
+
+struct OutputConfig {
+    std::string dataDir = "./output";
+    bool  exportCSV = false;
+    bool  exportJSON = false;
+    int   metricSampleInterval = 10;  // ticks between metric samples
+};
+
+struct SimConfig {
+    WorldConfig      world;
+    PopulationConfig population;
+    EvolutionConfig  evolution;
+    RunConfig        run;
+    OutputConfig     output;
+
+    // Input files
+    std::string populationFile;   // load initial population from JSON
+    std::string configFile;       // load this entire config from JSON
+
+    // Serialise to/from JSON (uses nlohmann/json)
+    void saveToFile(const std::string& path) const;
+    static SimConfig loadFromFile(const std::string& path);
+};
+```
+
+This is the **only** place parameters are defined. Both the CLI parser and the GUI read from and write to this same struct.
+
+### Command Line Interface
+
+Use a lightweight C++ argument parser — [CLI11](https://github.com/CLIUtils/CLI11) is header-only, well-maintained, and handles subcommands, validation, and config file loading.
+
+```
+wildboids --headless \
+          --config experiments/baseline.json \
+          --population evolved/gen247_champions.json \
+          --generations 500 \
+          --seed 42 \
+          --export-csv \
+          --data-dir ./results/run_003
+```
+
+Or with individual parameter overrides (these override values from the config file):
+
+```
+wildboids --headless \
+          --config experiments/baseline.json \
+          --prey-count 200 \
+          --mutation-rate 0.5 \
+          --generations 1000
+```
+
+#### CLI Structure
+
+```cpp
+// cli/cli_parser.h
+
+SimConfig parseCLI(int argc, char* argv[]);
+```
+
+The parser:
+1. Creates a default `SimConfig`
+2. If `--config` is provided, loads JSON and overwrites defaults
+3. If `--population` is provided, sets the population file path
+4. Any individual `--flag` overrides the corresponding field
+5. Returns the final `SimConfig`
+
+The main entry point then branches:
+
+```cpp
+int main(int argc, char* argv[]) {
+    SimConfig config = parseCLI(argc, argv);
+
+    World world(config);
+
+    if (config.populationFile.size() > 0) {
+        auto boids = BoidIO::loadPopulation(config.populationFile);
+        world.loadPopulation(boids);
+    }
+
+    if (headlessMode) {
+        // No SDL, no ImGui, no graphics linked at all
+        runHeadless(world, config);
+    } else {
+        // Full GUI
+        runGUI(world, config);
+    }
+}
+```
+
+### How GUI and CLI Stay in Sync
+
+The key insight: **ImGui doesn't own any parameter values.** Every ImGui widget reads from and writes to fields in the live `SimConfig` (or the `World`'s own mutable parameters). The GUI is a view onto the same struct the CLI populated.
+
+```cpp
+// display/ui_controls.cpp
+
+void drawParameterPanel(SimConfig& config, World& world) {
+    ImGui::SliderFloat("Mutation Rate", &config.evolution.mutationRate, 0.0f, 1.0f);
+    ImGui::SliderInt("Species Target", &config.evolution.speciesTarget, 2, 50);
+    ImGui::SliderFloat("World Width", &config.world.width, 100.0f, 5000.0f);
+
+    if (ImGui::Button("Save Config")) {
+        config.saveToFile("last_config.json");
+    }
+    if (ImGui::Button("Load Config")) {
+        config = SimConfig::loadFromFile(fileDialog());
+        world.applyConfig(config);
+    }
+}
+```
+
+This means:
+
+- Every slider/checkbox/input in the GUI corresponds to a `SimConfig` field
+- Every `SimConfig` field can be set via `--flag` on the command line
+- Saving the config from the GUI produces a JSON file that the CLI can load with `--config`
+- Loading a config file in the GUI sets all the sliders to the saved values
+
+The round-trip works: tweak parameters in the GUI → save config → use that config for a batch CLI run → load the resulting population back into the GUI.
+
+### Parameter Visibility: What's Available Where?
+
+Not every parameter makes sense in both modes. Use a simple annotation approach:
+
+```cpp
+// simulation/param_registry.h
+
+enum class ParamAccess {
+    Both,       // visible in GUI and CLI
+    CLIOnly,    // only makes sense on command line (e.g. --headless, --data-dir)
+    GUIOnly,    // only makes sense with a window (e.g. camera zoom, render options)
+    Internal    // not user-facing (computed values, cached state)
+};
+
+struct ParamMeta {
+    std::string name;           // "mutation_rate"
+    std::string displayName;    // "Mutation Rate"
+    std::string description;    // "Probability of mutating each gene"
+    std::string group;          // "Evolution" — for ImGui collapsible sections + CLI --help groups
+    ParamAccess access;
+    float min, max;             // for sliders and CLI validation
+};
+```
+
+A central registry lists every parameter with its metadata:
+
+```cpp
+const std::vector<ParamMeta> PARAM_REGISTRY = {
+    {"mutation_rate",  "Mutation Rate",   "Probability of mutating each gene",
+     "Evolution", ParamAccess::Both, 0.0f, 1.0f},
+
+    {"headless",       "Headless Mode",   "Run without GUI",
+     "Run", ParamAccess::CLIOnly, 0, 1},
+
+    {"camera_zoom",    "Camera Zoom",     "Viewport zoom level",
+     "Display", ParamAccess::GUIOnly, 0.1f, 10.0f},
+
+    {"generations",    "Max Generations", "Stop after N generations (0 = unlimited)",
+     "Run", ParamAccess::Both, 0, 100000},
+    // ...
+};
+```
+
+The CLI parser iterates this registry to generate `--help` text and validate inputs. The GUI iterates it to auto-generate ImGui panels grouped by category. Adding a new parameter means adding one entry to the registry, one field to `SimConfig`, and it automatically appears in both CLI `--help` and the GUI panel.
+
+### Config File Format (JSON)
+
+The same `SimConfig` struct serialises to JSON:
+
+```json
+{
+  "world": {
+    "width": 1000.0,
+    "height": 1000.0,
+    "toroidal": true,
+    "dt": 0.00833
+  },
+  "population": {
+    "predatorCount": 30,
+    "preyCount": 120,
+    "initialEnergy": 100.0
+  },
+  "evolution": {
+    "generationTicks": 6000,
+    "mutationRate": 0.3,
+    "crossoverRate": 0.75,
+    "speciesTarget": 10,
+    "compatibilityThreshold": 3.0
+  },
+  "run": {
+    "maxGenerations": 500,
+    "snapshotInterval": 50,
+    "rngSeed": 42
+  },
+  "output": {
+    "dataDir": "./results/experiment_001",
+    "exportCSV": true,
+    "exportJSON": true,
+    "metricSampleInterval": 10
+  }
+}
+```
+
+This is the file you save from the GUI and pass to `--config` on the CLI. Human-readable, diffable, version-controllable.
+
+### Typical Workflows
+
+**Interactive exploration:**
+```
+wildboids                          # launches GUI with defaults
+wildboids --config my_setup.json   # launches GUI with saved config
+```
+
+**Batch evolution runs (overnight):**
+```
+wildboids --headless --config sweep_base.json --mutation-rate 0.1 --generations 1000 --data-dir ./results/mr01 &
+wildboids --headless --config sweep_base.json --mutation-rate 0.3 --generations 1000 --data-dir ./results/mr03 &
+wildboids --headless --config sweep_base.json --mutation-rate 0.5 --generations 1000 --data-dir ./results/mr05 &
+```
+
+**Inspect results in GUI:**
+```
+wildboids --population ./results/mr03/gen1000_population.json
+```
+
+**Reproduce a specific run:**
+```
+wildboids --headless --config ./results/mr03/config.json --seed 42
+```
+
+### Build Structure Implications
+
+The headless binary should be buildable **without** SDL3/ImGui as dependencies at all. CMake handles this:
+
+```cmake
+# simulation library — no graphics
+add_library(wildboids_sim
+    src/simulation/world.cpp
+    src/simulation/boid.cpp
+    # ...
+)
+
+# CLI parser — no graphics
+add_library(wildboids_cli
+    src/cli/cli_parser.cpp
+)
+target_link_libraries(wildboids_cli wildboids_sim)
+
+# Headless binary — links sim + cli only
+add_executable(wildboids_headless
+    src/main_headless.cpp
+)
+target_link_libraries(wildboids_headless wildboids_sim wildboids_cli)
+
+# GUI binary — links sim + cli + display
+add_executable(wildboids
+    src/main.cpp
+)
+target_link_libraries(wildboids wildboids_sim wildboids_cli wildboids_display)
+```
+
+Two binaries: `wildboids` (full GUI) and `wildboids_headless` (no graphics dependencies at all). Or a single binary that conditionally initialises the display layer based on the `--headless` flag — either approach works, but separate binaries mean the headless build never needs SDL installed.
+
+---
+
 ## Sources
 
 - [PixiJS v8 Launch Announcement](https://pixijs.com/blog/pixi-v8-launches)
