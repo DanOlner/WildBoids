@@ -3,9 +3,11 @@
 #include "simulation/rigid_body.h"
 #include "simulation/thruster.h"
 #include "simulation/sensory_system.h"
+#include "brain/processing_network.h"
 #include <vector>
 #include <string>
 #include <optional>
+#include <memory>
 
 struct Boid {
     std::string type;   // "prey" or "predator"
@@ -17,7 +19,9 @@ struct Boid {
     std::optional<SensorySystem> sensors;
     std::vector<float> sensor_outputs;
 
+    // Brain (optional — boids without a brain have thrusters set externally)
+    std::unique_ptr<ProcessingNetwork> brain;
+
     // Apply thruster forces to rigid body and integrate one timestep.
-    // No brain yet — thruster power levels must be set externally.
     void step(float dt, float linear_drag, float angular_drag);
 };

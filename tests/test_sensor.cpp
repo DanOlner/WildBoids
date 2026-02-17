@@ -23,6 +23,14 @@ static Boid make_boid(Vec2 pos, float angle = 0, const std::string& type = "prey
     return b;
 }
 
+// Helper: build a vector of boids from variadic args (avoids initializer_list copy)
+template <typename... Args>
+static std::vector<Boid> make_boids(Args&&... args) {
+    std::vector<Boid> v;
+    (v.push_back(std::forward<Args>(args)), ...);
+    return v;
+}
+
 // Helper: create a world with boids and run one step to build the grid
 static World make_world(std::vector<Boid> boids, float world_size = 800.0f) {
     WorldConfig config;
@@ -75,7 +83,7 @@ TEST_CASE("Single boid directly ahead detected", "[sensor]") {
     SensorySystem sys({spec});
 
     // Self at (400,400) facing up (+Y), other at (400,450) — 50 units ahead
-    auto boids = std::vector{make_boid({400, 400}), make_boid({400, 450})};
+    auto boids = make_boids(make_boid({400, 400}), make_boid({400, 450}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -91,7 +99,7 @@ TEST_CASE("Boid outside arc not detected", "[sensor]") {
     SensorySystem sys({spec});
 
     // Other boid directly to the right (90° from forward) — outside 18° half-arc
-    auto boids = std::vector{make_boid({400, 400}), make_boid({450, 400})};
+    auto boids = make_boids(make_boid({400, 400}), make_boid({450, 400}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -105,7 +113,7 @@ TEST_CASE("Boid outside range not detected", "[sensor]") {
     SensorySystem sys({spec});
 
     // Other boid 150 units ahead — beyond 100 range
-    auto boids = std::vector{make_boid({400, 400}), make_boid({400, 550})};
+    auto boids = make_boids(make_boid({400, 400}), make_boid({400, 550}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -120,7 +128,7 @@ TEST_CASE("Self not detected", "[sensor]") {
     SensorySystem sys({spec});
 
     // Only one boid in the world
-    auto boids = std::vector{make_boid({400, 400})};
+    auto boids = make_boids(make_boid({400, 400}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -134,7 +142,7 @@ TEST_CASE("Toroidal wrap: boid across world edge detected", "[sensor]") {
     SensorySystem sys({spec});
 
     // Self near top edge facing up, other near bottom edge (wraps to ~30 units ahead)
-    auto boids = std::vector{make_boid({400, 790}), make_boid({400, 10})};
+    auto boids = make_boids(make_boid({400, 790}), make_boid({400, 10}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -150,8 +158,8 @@ TEST_CASE("EntityFilter: prey sensor ignores predators", "[sensor]") {
     SensorySystem sys({spec});
 
     // Self is prey, other is predator directly ahead
-    auto boids = std::vector{make_boid({400, 400}, 0, "prey"),
-                              make_boid({400, 450}, 0, "predator")};
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 450}, 0, "predator"));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -168,7 +176,7 @@ TEST_CASE("Rotated boid: sensor arc moves with heading", "[sensor]") {
     // Self facing right (angle = -π/2, since +Y is forward, -π/2 rotates forward to +X)
     // Other boid is 50 units to the right — which is now "forward" for the rotated boid
     float heading = -PI / 2.0f; // facing +X
-    auto boids = std::vector{make_boid({400, 400}, heading), make_boid({450, 400})};
+    auto boids = make_boids(make_boid({400, 400}, heading), make_boid({450, 400}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -183,10 +191,10 @@ TEST_CASE("SectorDensity signal type", "[sensor]") {
     SensorySystem sys({spec});
 
     // Self + 3 others nearby
-    auto boids = std::vector{make_boid({400, 400}),
+    auto boids = make_boids(make_boid({400, 400}),
                               make_boid({410, 400}),
                               make_boid({420, 400}),
-                              make_boid({430, 400})};
+                              make_boid({430, 400}));
     World world = make_world(std::move(boids));
 
     float output = 0;
@@ -203,7 +211,7 @@ TEST_CASE("Multiple sensors produce independent outputs", "[sensor]") {
     SensorySystem sys({forward, right});
 
     // Other boid directly ahead
-    auto boids = std::vector{make_boid({400, 400}), make_boid({400, 450})};
+    auto boids = make_boids(make_boid({400, 400}), make_boid({400, 450}));
     World world = make_world(std::move(boids));
 
     float outputs[2] = {0, 0};

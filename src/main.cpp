@@ -1,5 +1,6 @@
 #include "simulation/world.h"
 #include "io/boid_spec.h"
+#include "brain/neat_genome.h"
 #include "display/renderer.h"
 #include "display/app.h"
 #include <random>
@@ -25,13 +26,29 @@ int main() {
         return 1;
     }
 
-    // Spawn boids at random positions with random headings
+    // Spawn boids at random positions with random headings.
+    // Half get a NEAT brain with random weights, half use random wander.
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> pos_x(0, config.width);
     std::uniform_real_distribution<float> pos_y(0, config.height);
     std::uniform_real_distribution<float> angle_dist(0, 2.0f * 3.14159265f);
+    std::normal_distribution<float> weight_dist(0.0f, 1.0f);
 
+    int next_innov = 1;
     for (int i = 0; i < 30; i++) {
+        // Give half the boids a brain with random weights
+        if (i < 15) {
+            NeatGenome genome = NeatGenome::minimal(7, 4, next_innov);
+            // Reset innovation counter so all brains share the same topology
+            next_innov = 1;
+            for (auto& c : genome.connections) {
+                c.weight = weight_dist(rng);
+            }
+            spec.genome = genome;
+        } else {
+            spec.genome.reset();
+        }
+
         Boid boid = create_boid_from_spec(spec);
         boid.body.position = {pos_x(rng), pos_y(rng)};
         boid.body.angle = angle_dist(rng);

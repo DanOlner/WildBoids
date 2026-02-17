@@ -75,11 +75,13 @@ void App::handle_events() {
     }
 }
 
-// Temporary pre-brain behaviour: constant rear thrust + random steering
+// Temporary pre-brain behaviour: constant rear thrust + random steering.
+// Skips boids that have a brain — those are controlled by run_brains().
 void App::apply_random_wander() {
     std::uniform_real_distribution<float> steer_dist(-0.4f, 0.4f);
 
     for (auto& boid : world_.get_boids_mut()) {
+        if (boid.brain) continue;  // brain-driven boid
         if (boid.thrusters.size() < 3) continue;
 
         // Constant rear thrust

@@ -1,5 +1,6 @@
 #include "io/boid_spec.h"
 #include "brain/neat_genome.h"
+#include "brain/neat_network.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <stdexcept>
@@ -158,6 +159,10 @@ Boid create_boid_from_spec(const BoidSpec& spec) {
     if (!spec.sensors.empty()) {
         boid.sensors.emplace(spec.sensors);
         boid.sensor_outputs.resize(boid.sensors->input_count(), 0.0f);
+    }
+
+    if (spec.genome.has_value()) {
+        boid.brain = std::make_unique<NeatNetwork>(*spec.genome);
     }
 
     return boid;

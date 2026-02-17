@@ -58,6 +58,7 @@ add_executable(wildboids_tests
     tests/test_direct_wire.cpp
     tests/test_neat_genome.cpp
     tests/test_neat_network.cpp
+    tests/test_boid_brain.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)

@@ -33,4 +33,5 @@ private:
     void wrap_position(Vec2& pos) const;
     void rebuild_grid();
     void run_sensors();
+    void run_brains();
 };

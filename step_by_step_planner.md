@@ -302,7 +302,7 @@ After Phase 0, we can:
 | 1 | Simple rendering | SDL3 window, boid triangles, fixed timestep — **done** |
 | 2 | Spatial grid | O(1) neighbour queries with toroidal wrapping — **done** |
 | 3 | Sensory system | Sensor arcs → float array of signals per boid — **done** |
-| 4 | NEAT brain | ProcessingNetwork interface → NEAT genome/network → brain-driven boids |
+| 4 | NEAT brain | ProcessingNetwork interface → NEAT genome/network → brain-driven boids — **done** |
 | 5 | Evolution loop | Mutation, crossover, speciation, food, prey foraging evolution |
 | 5b | Co-evolution | Predator population, arms-race dynamics |
 | 6 | Analytics & UI | ImGui controls, ImPlot graphs, data collection |
@@ -1381,3 +1381,51 @@ Sensory system implemented. Each boid has an array of wedge-shaped sensor arcs t
 - **Perception runs after grid rebuild** in `World::step()`, giving sensors access to current-tick positions. One-tick delay: sensor outputs computed this tick will feed the brain next tick (Phase 4).
 
 **Algorithm summary:** For each sensor on each boid: query spatial grid within `max_range` → for each candidate (skip self, apply entity filter) → compute `toroidal_delta` → distance check → rotate delta into body frame (`delta.rotated(-self.angle)`) → compute body-frame angle via `atan2(x, y)` (+Y = forward) → check against sensor arc via `angle_in_arc()` → accumulate nearest distance or count.
+
+### Phase 4 — completed [17.2.26]
+
+NEAT brain implemented end-to-end. Sensors → NEAT network → thrusters → physics pipeline fully working. 95 tests, all passing (56 from Phases 0–3 + 10 DirectWire + 9 genome + 11 network + 3 genome serialisation + 6 brain integration).
+
+**Steps completed:**
+
+- **4.1 — ProcessingNetwork + DirectWireNetwork**: Abstract `ProcessingNetwork` interface (`activate`, `reset`). `DirectWireNetwork` test fixture with fixed weight matrix + sigmoid activation. 10 tests.
+- **4.2 — NEAT genome data types**: `NeatGenome` with `NodeGene` and `ConnectionGene`. `NeatGenome::minimal()` factory creates fully-connected input→output topology. Input nodes get `Linear` activation, output nodes get `Sigmoid`. 9 tests.
+- **4.3 — NeatNetwork (phenotype from genotype)**: Feed-forward network built from genome. Kahn's algorithm for topological sort. Per-node incoming connection lists for correct multi-layer evaluation. 11 tests.
+- **4.4 — Genome JSON serialisation**: Optional `genome` field in boid spec JSON. Nodes (id, type, activation, bias) and connections (innovation, source, target, weight, enabled) round-trip through JSON. 3 tests.
+- **4.5 — Integration: brain-driven boids in World**: `Boid` gains `std::unique_ptr<ProcessingNetwork> brain`. `World::step()` calls `run_brains()` after sensors. `create_boid_from_spec()` builds `NeatNetwork` from genome if present. `apply_random_wander()` skips brain-driven boids. 6 tests.
+
+**Files created/modified:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/brain/processing_network.h` | Created | Abstract interface: `activate(inputs, outputs)`, `reset()` |
+| `src/brain/direct_wire_network.h/.cpp` | Created | Test fixture: fixed weight matrix, sigmoid, no evolution |
+| `src/brain/neat_genome.h/.cpp` | Created | `NeatGenome`, `NodeGene`, `ConnectionGene`, `NeatGenome::minimal()` |
+| `src/brain/neat_network.h/.cpp` | Created | Feed-forward NEAT network: topological sort, per-node evaluation, 4 activation functions |
+| `src/simulation/boid.h` | Modified | Added `std::unique_ptr<ProcessingNetwork> brain` — makes `Boid` move-only (non-copyable) |
+| `src/simulation/world.h/.cpp` | Modified | Added `run_brains()` step in pipeline after sensors |
+| `src/io/boid_spec.h` | Modified | Added `std::optional<NeatGenome> genome` to `BoidSpec` |
+| `src/io/boid_spec.cpp` | Modified | Genome JSON parse/save, `create_boid_from_spec()` builds `NeatNetwork` from genome |
+| `src/display/app.cpp` | Modified | `apply_random_wander()` skips boids with a brain |
+| `CMakeLists.txt` | Modified | Added brain `.cpp` files to sim library, new test files |
+| `tests/test_direct_wire.cpp` | Created | 10 tests: zero/nonzero weights, saturation, bias, size mismatches, polymorphism |
+| `tests/test_neat_genome.cpp` | Created | 9 tests: node count/types, full connectivity, innovation numbers, activations |
+| `tests/test_neat_network.cpp` | Created | 11 tests: zero weights, saturation, DirectWire equivalence, hidden nodes (1, 2, diamond), disabled connections, bias, reset |
+| `tests/test_boid_brain.cpp` | Created | 6 tests: sigmoid(0) power, world step activates brain, brainless boid unchanged, sensor→brain response, full pipeline forward motion, auto brain creation |
+| `tests/test_boid_spec.cpp` | Modified | 3 new tests: no-genome fallback, genome field round-trip, network output equivalence after round-trip |
+| `tests/test_sensor.cpp` | Modified | Replaced `std::vector{...}` initialiser lists with variadic `make_boids()` helper — `Boid` is now non-copyable due to `unique_ptr` |
+
+**Key design note:** The pipeline order in `World::step()` is: physics → wrap → grid → sensors → brains. Brain outputs take effect on the *next* tick's physics step (one-tick delay), which is the intended design from the plan.
+
+**Bug found and fixed — NeatNetwork hidden node propagation (Step 4.3):**
+
+The initial implementation accumulated all connection sums in a single bulk pass before evaluating nodes. For hidden nodes, downstream nodes read `hidden.value` which was still 0.0 (not yet evaluated), so output was `sigmoid(0) = 0.5` regardless of input. Fix: changed to per-node evaluation in topological order using pre-built `incoming_` connection lists. Each node accumulates its inputs and applies its activation function before any downstream node reads its value.
+
+**Structural notes for Phase 5:**
+
+- `Boid` is now **move-only** (non-copyable) due to `std::unique_ptr<ProcessingNetwork> brain`. Code that previously used `std::vector{boid1, boid2}` initialiser lists must use `push_back`/`emplace_back` with `std::move` instead.
+- The `ProcessingNetwork` interface is polymorphic — `DirectWireNetwork` and `NeatNetwork` are interchangeable. Phase 5 evolution will create `NeatNetwork` instances from mutated/crossed-over genomes.
+- `NeatGenome::minimal(7, 4, next_innov)` produces 11 nodes and 28 connections with sequential innovation numbers starting from `next_innov`. The counter is passed by reference and updated.
+- Genome JSON format: `"genome": { "nodes": [{id, type, activation, bias}...], "connections": [{innovation, source, target, weight, enabled}...] }`. Innovation numbers are preserved through serialisation (critical for crossover alignment).
+- Four activation functions available: `Sigmoid` (output default), `Tanh`, `ReLU`, `Linear` (input default). Per-node, stored in `NodeGene`.
+- Output nodes use `Sigmoid` → outputs naturally in [0, 1] → maps directly to thruster power [0, 1].
