@@ -1278,3 +1278,177 @@ The detailed build steps in this section have been transferred to [step_by_step_
 ### Braitenberg Vehicles and Simple Sensor-Motor Mappings
 - [Braitenberg Vehicles — Wikipedia](https://en.wikipedia.org/wiki/Braitenberg_vehicle)
 - [From Braitenberg Vehicles to Neural Controllers (PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC7525016/)
+
+---
+
+## How Evolution Actually Progresses: NEAT Generations vs Steady-State Replacement
+
+*Added 17.2.26 — reflecting on the gap between the test harness and the live GUI app.*
+
+### Where We Are Now
+
+As of Step 5.5b (164 tests), the full evolutionary machinery exists but only runs in tests. The live GUI app (`main.cpp`) spawns 30 boids with random NEAT weights and lets them run — but there are **no generations**. Boids die from metabolism and thrust costs, food replenishes, and eventually the world empties. There's no reproduction, no selection, no evolution.
+
+The evolution loop exists in `test_evolution.cpp`'s `run_generation()` harness:
+
+```
+For each generation:
+  1. Create a fresh World
+  2. Spawn one boid per genome (with NeatNetwork brain built from genome)
+  3. Pre-seed food
+  4. Run N ticks (all boids in same world simultaneously)
+  5. Collect fitness = total_energy_gained per boid
+  6. Population::evaluate() — record fitness, update species stagnation
+  7. Population::advance_generation() — speciate → fitness sharing → select → reproduce → mutate
+  8. Repeat from 1 with new genomes
+```
+
+This is **generational NEAT** — the standard approach. The entire population lives, is evaluated, reproduces, and is replaced as a batch. Every boid gets the same number of ticks to prove itself. Clean, principled, well-studied.
+
+### The Generational Model in Detail
+
+Here's exactly what happens inside `Population::advance_generation()`:
+
+1. **Remove stagnant species** — any species that hasn't improved its best fitness in `max_stagnation` generations (default 15) is killed off entirely. All its genomes are discarded. This prevents evolutionary dead ends from consuming population slots forever.
+
+2. **Fitness sharing** — each genome's fitness is divided by the size of its species. This is the speciation pressure that prevents any single species from taking over. A genome with fitness 100 in a species of 10 gets adjusted fitness 10. A genome with fitness 80 in a species of 2 gets adjusted fitness 40. The small species is rewarded for its novelty.
+
+3. **Allocate offspring** — each species gets offspring slots proportional to its total adjusted fitness. More successful species reproduce more. Every species gets at least 1 slot.
+
+4. **Elitism** — the best genome in each species is copied unchanged into the next generation (default 1 per species). This ensures the best solution found so far is never lost.
+
+5. **Trim to breeding pool** — within each species, only the top `survival_rate` fraction (default 25%) is eligible to breed. The bottom 75% are discarded.
+
+6. **Produce offspring** — for each remaining slot: either crossover two parents (75% probability, tournament selection within species) or clone-and-mutate one parent (25%). Mutation can perturb weights, add connections, add nodes, toggle or delete connections.
+
+7. **Re-speciate** — assign all new genomes to species based on compatibility distance to species representatives.
+
+The world is then **completely reset** for the next generation. New food, new positions, fresh energy. Every boid starts on equal footing.
+
+### The Alternative: "When One Dies, Breed a Replacement"
+
+The user's question: what if instead of discrete generations, we run the simulation continuously, and when a boid dies, we immediately spawn a replacement bred from the fittest survivors? This is called **steady-state evolution** (or sometimes "continuous evolution" or "overlapping generations").
+
+The idea:
+
+```
+On each tick:
+  1. Normal simulation (physics, sensors, brains, food, energy)
+  2. For each boid that just died:
+     a. Select two parents from the living boids (by fitness = energy gathered, or survival time, or some mix)
+     b. Crossover their genomes
+     c. Mutate the offspring
+     d. Spawn a new boid with the offspring genome
+```
+
+This has some immediate appeal:
+
+- **It looks alive.** You watch the simulation and evolution happens visibly — boids die and new ones appear, gradually getting better. No jarring world resets between generations.
+- **It's simple to implement.** No generation counter, no batch evaluation, no world reset. Just "death → breed → spawn."
+- **It's closer to biology.** Real organisms don't wait for everyone else to die before reproducing. Generations overlap. The fittest individuals reproduce more because they survive longer and have more mating opportunities.
+
+### How It Differs From NEAT Generational Evolution
+
+The differences are real and consequential:
+
+**1. Selection pressure is different.**
+
+In generational NEAT, every genome gets exactly the same evaluation period (e.g. 1200 ticks). A genome that finds food quickly and one that finds food at tick 1199 both get their fitness recorded fairly. The selection operator then compares them.
+
+In steady-state, selection is *implicit* — the longest-surviving boids are the ones available to breed. This conflates "ability to survive" with "ability to be a good parent." A boid that survives by sitting still in a food-rich corner might breed prolifically while a boid with better foraging genes that spawned in a food desert dies young. The selection signal is noisier.
+
+**2. Speciation is harder.**
+
+NEAT's speciation system is designed around discrete generations: at the end of each generation, assign all genomes to species, compute fitness sharing, allocate offspring. In steady-state, the population is constantly changing. When do you re-speciate? Every death? Every N deaths? You'd need to maintain species memberships incrementally, which is doable but more complex.
+
+Without speciation, innovations die. This is NEAT's core insight (see the speciation section earlier in this doc). A new hidden node starts with untuned weights and performs *worse* than established genomes. In generational NEAT, speciation gives it a protected niche to develop in. In raw steady-state, it's competing against already-tuned survivors and will likely be outbred before its weights improve.
+
+**3. Innovation tracking is messier.**
+
+NEAT's innovation numbers assume a generation boundary: "has the mutation source→target been seen before *this generation*?" The cache clears each generation. In steady-state, there's no natural point to clear the cache. If you never clear it, every structural mutation ever seen gets a permanent innovation number — the innovation space grows monotonically and crossover alignment becomes less meaningful over time (more and more disjoint genes, fewer matching genes). If you clear it periodically, you need to choose a cadence, and simultaneous identical mutations in different "eras" won't align.
+
+**4. Fitness evaluation is uncontrolled.**
+
+In generational NEAT, every boid starts with the same energy, in a freshly seeded world, for the same number of ticks. This is a *controlled experiment*. In steady-state, a boid born when food is abundant has a huge advantage over one born during a famine. A boid born near a cluster of dying competitors inherits a food-rich zone. The fitness signal is confounded by birth timing and birth location.
+
+**5. Population diversity can collapse.**
+
+In generational NEAT, even if one genome dominates, fitness sharing and speciation force diversity. In naive steady-state, a successful genome's offspring rapidly fill the population. Within 50–100 deaths, every living boid could be a descendant of one lucky ancestor. The gene pool narrows. This is the [founder effect](https://en.wikipedia.org/wiki/Founder_effect) on fast-forward.
+
+### Is It Ill-Advised?
+
+Not inherently — but it needs more machinery to work well, and the results are less reproducible.
+
+**Steady-state evolution works when:**
+
+- The environment is the point. You *want* boids adapting to the current state of the world, not to a fresh reset. If the world has persistent structure (territory, predator-prey dynamics, resource gradients), steady-state lets evolution respond to that structure.
+- You don't need strict scientific comparisons between runs. Steady-state is inherently stochastic in ways generational evolution isn't.
+- You add speciation safeguards. [rtNEAT (Real-Time NEAT)](https://nn.cs.utexas.edu/downloads/papers/stanley.ieeetec05.pdf) — Stanley's own adaptation of NEAT for steady-state — handles this by maintaining species even in continuous replacement. It removes the worst-performing genome of the worst-performing species, replaces it with offspring from the best-performing species. This preserves NEAT's diversity protection.
+
+**Steady-state evolution struggles when:**
+
+- The fitness landscape is noisy (ours is — food placement is random, birth location matters).
+- Speciation isn't maintained (diversity collapse).
+- You want to compare "generation 50 from run A vs generation 50 from run B" — there's no clean generation boundary.
+
+### A Practical Hybrid: Micro-Generations in the Live App
+
+Given where we are in the build (full NEAT machinery in `Population`, working food/energy/death mechanics, 164 tests), the path of least resistance is probably neither pure generational nor pure steady-state, but a hybrid:
+
+**Option A — Generational with visible replay.** Run NEAT generations in the background (or in fast-forward). Between generations, replay the best genome in the live renderer so you can watch it forage. The evolution is clean NEAT; the visualisation is just playback of the champion.
+
+**Option B — Timed generations in the live world.** Run the live app for N seconds of sim time, then trigger a generation boundary: collect fitness from all living boids (dead boids keep their fitness from when they died), advance the population, respawn everyone with new genomes. The world *could* reset (fresh food) or persist (food stays where it is). This is generational NEAT but with the generation happening inside the GUI rather than in a test harness.
+
+**Option C — Steady-state with rtNEAT safeguards.** When a boid dies, select parents from surviving boids (weighted by their fitness so far), crossover, mutate, respawn. Maintain species incrementally. This is the most "alive" feeling but needs careful implementation to avoid diversity collapse.
+
+**Option D — Simple steady-state for quick experimentation.** The minimal version: when a boid dies, pick the two longest-lived (or highest-energy) survivors, crossover their genomes, mutate, spawn. No speciation, no fitness sharing. This is explicitly *not* NEAT — it's just genetic recombination. It'll work for discovering "move forward" and "steer toward food" but will likely stall before discovering complex behaviors that require hidden nodes. Good for a first pass; upgrade to Option B or C when you want real evolution.
+
+### What's Already Built That Each Option Can Use
+
+| Component | Gen. (A/B) | Steady-State (C/D) | Status |
+|-----------|:-:|:-:|--------|
+| `Population` class (speciation, fitness sharing, selection, crossover, mutation) | Yes | Needs adaptation for C, not used in D | Built (Step 5.3) |
+| `NeatGenome` crossover + mutation | Yes | Yes | Built (Steps 5.1–5.2) |
+| `InnovationTracker` | Yes | Needs modified clearing for C | Built (Step 5.1) |
+| Food / energy / death mechanics | Yes | Yes | Built (Step 5.4) |
+| Food sensors | Yes | Yes | Built (Step 5.5b) |
+| `run_generation()` harness | Yes (is this) | No — needs new harness | Built (Step 5.5) |
+| World reset between generations | Needed for A/B | Not needed for C/D | Trivial |
+| Per-boid fitness tracking (`total_energy_gained`) | Yes | Yes (but read at death time, not at gen boundary) | Built |
+| Species maintenance during continuous sim | N/A | Needed for C | Not built |
+
+### Recommendation
+
+**Start with Option B** (timed generations in the live world). It reuses all the existing `Population` machinery unchanged, gives you visible evolution in the GUI, and produces results directly comparable to the test harness. The implementation is roughly:
+
+```cpp
+// In App::run() or similar:
+constexpr float GEN_LENGTH_SECONDS = 10.0f;  // sim time per generation
+float gen_timer = 0.0f;
+
+// On each frame:
+gen_timer += dt;
+if (gen_timer >= GEN_LENGTH_SECONDS) {
+    // Collect fitness from all boids (living and dead)
+    population.evaluate([&](int idx, const NeatGenome&) {
+        return world.get_boids()[idx].total_energy_gained;
+    });
+    population.advance_generation();
+
+    // Reset world, spawn new boids from new genomes
+    world.clear_boids();
+    world.clear_food();
+    for (const auto& genome : population.genomes()) {
+        Boid boid = create_boid_from_spec(spec);
+        boid.body.position = {random_x(rng), random_y(rng)};
+        boid.body.angle = random_angle(rng);
+        boid.brain = std::make_unique<NeatNetwork>(genome);
+        world.add_boid(std::move(boid));
+    }
+    gen_timer = 0.0f;
+}
+```
+
+Then **try Option D** (simple steady-state) as a second mode, toggled by a key press. This lets you compare the two approaches visually. Option D doesn't need `Population` at all — just the crossover and mutation functions directly.
+
+Both options are buildable in a single step from the current codebase. The existing 164 tests continue to validate the underlying NEAT machinery regardless of which high-level loop drives it.

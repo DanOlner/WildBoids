@@ -1628,5 +1628,101 @@ Added `EntityFilter::Food` so sensor arcs can detect nearby food items using the
 | 5.4 | Food, energy, fitness evaluation | Done | 12 |
 | 5.5 | Evolution loop integration | Done | 4 |
 | 5.5b | Food sensors | Done | 7 |
+| 5.6 | Headless runner | Done | 3 |
 
-Total tests: 164 (up from 157 at end of Step 5.5).
+Total tests: 167 (up from 164 at end of Step 5.5b).
+
+---
+
+### Step 5.6 build log — Headless evolution runner
+
+**Files created:**
+- `src/headless_main.cpp` — CLI evolution runner, no SDL dependency
+- `data/sim_config.json` — Reference config with default world/NEAT/evolution parameters
+- `tests/test_headless.cpp` — 3 integration tests
+
+**Files modified:**
+- `CMakeLists.txt` — Added `wildboids_headless` target (links `wildboids_sim` only, no SDL)
+
+**Usage:**
+```bash
+./build/wildboids_headless [options]
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--generations N` | 100 | Number of NEAT generations to run |
+| `--seed N` | 42 | RNG seed for reproducibility |
+| `--population N` | 150 | Population size |
+| `--ticks N` | 2400 | Simulation ticks per generation |
+| `--spec PATH` | `data/simple_boid.json` | Boid spec JSON file |
+| `--save-interval N` | 10 | Save champion genome every N generations |
+| `--output-dir PATH` | `data/champions` | Directory for saved champion genomes |
+| `--help` | — | Show usage |
+
+**Output:**
+- CSV stats to stdout: `gen,best_fitness,mean_fitness,species_count,pop_size`
+- Summary to stderr (so you can redirect CSV to file: `./build/wildboids_headless > log.csv`)
+- Champion genomes saved as JSON to output dir (e.g. `data/champions/champion_gen10.json`)
+
+**Example:**
+```bash
+# Run 50 generations, save to file
+./build/wildboids_headless --generations 50 --seed 42 > evolution_log.csv
+
+# Smaller population, faster iterations
+./build/wildboids_headless --generations 200 --population 50 --ticks 1200
+```
+
+**Tests added (3):**
+1. Completes N generations without crash (population size and species count stable)
+2. Saved champion genome loads from JSON and produces a valid network
+3. Champion genome replays in a fresh world without crash
+
+**Additional world config flags** (added after initial build):
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--world-size N` | 2000 | World width and height |
+| `--food-max N` | 200 | Max food items |
+| `--food-rate F` | 8 | Food spawns per second |
+| `--food-energy F` | 15 | Energy per food item |
+| `--metabolism F` | 0.1 | Energy drain per second |
+| `--thrust-cost F` | 0.01 | Energy cost per thrust per second |
+| `--save-best` | off | Save whenever a new all-time best fitness is found |
+
+**Output details:**
+- The final summary reports the all-time best fitness and which generation/file it came from:
+  ```
+  Evolution complete.
+    Generations: 100
+    All-time best fitness: 75 (gen 23)
+    Best champion file: data/champions/champion_gen23.json
+    Final gen species: 3
+  ```
+- "New all-time best" messages print to stderr as they happen during the run.
+- Use `--save-best` to ensure the best champion is always saved (otherwise it may land between save intervals).
+
+**Loading a champion into the GUI:**
+
+The GUI app (`wildboids`) accepts `--champion` to load an evolved genome:
+
+```bash
+# Evolve headless, then watch the champion
+./build-release/wildboids_headless --generations 100 --save-best
+# The summary tells you which file has the best genome — use that:
+./build-release/wildboids --champion data/champions/champion_gen23.json
+
+# All boids share the same evolved brain; control count with --boids
+./build-release/wildboids --champion data/champions/champion_gen23.json --boids 50
+```
+
+Without `--champion`, the GUI spawns boids with random NEAT weights (default behaviour).
+
+**Release build** (no sanitizers, ~30x faster — use for evolution runs):
+```bash
+cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release
+```

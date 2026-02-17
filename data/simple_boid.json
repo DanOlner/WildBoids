@@ -12,7 +12,7 @@
             "positionY": -0.5,
             "directionX": 0.0,
             "directionY": 1.0,
-            "maxThrust": 50.0
+            "maxThrust": 20.0
         },
         {
             "id": 1,
@@ -39,19 +39,89 @@
             "positionY": 0.5,
             "directionX": 0.0,
             "directionY": -1.0,
-            "maxThrust": 15.0
+            "maxThrust": 20.0
         }
     ],
     "sensors": [
-        { "id": 0, "centerAngleDeg": 0,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 1, "centerAngleDeg": -36,   "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 2, "centerAngleDeg": 36,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 3, "centerAngleDeg": -72,   "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 4, "centerAngleDeg": 72,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 5, "centerAngleDeg": -135,  "arcWidthDeg": 90, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 6, "centerAngleDeg": 135,   "arcWidthDeg": 90, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
-        { "id": 7, "centerAngleDeg": 0,     "arcWidthDeg": 120, "maxRange": 120, "filter": "food", "signalType": "nearestDistance" },
-        { "id": 8, "centerAngleDeg": -120,  "arcWidthDeg": 120, "maxRange": 120, "filter": "food", "signalType": "nearestDistance" },
-        { "id": 9, "centerAngleDeg": 120,   "arcWidthDeg": 120, "maxRange": 120, "filter": "food", "signalType": "nearestDistance" }
+        {
+            "id": 0,
+            "centerAngleDeg": 0,
+            "arcWidthDeg": 36,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 1,
+            "centerAngleDeg": -36,
+            "arcWidthDeg": 36,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 2,
+            "centerAngleDeg": 36,
+            "arcWidthDeg": 36,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 3,
+            "centerAngleDeg": -72,
+            "arcWidthDeg": 36,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 4,
+            "centerAngleDeg": 72,
+            "arcWidthDeg": 36,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 5,
+            "centerAngleDeg": -135,
+            "arcWidthDeg": 90,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 6,
+            "centerAngleDeg": 135,
+            "arcWidthDeg": 90,
+            "maxRange": 100,
+            "filter": "any",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 7,
+            "centerAngleDeg": 0,
+            "arcWidthDeg": 120,
+            "maxRange": 120,
+            "filter": "food",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 8,
+            "centerAngleDeg": -120,
+            "arcWidthDeg": 120,
+            "maxRange": 120,
+            "filter": "food",
+            "signalType": "nearestDistance"
+        },
+        {
+            "id": 9,
+            "centerAngleDeg": 120,
+            "arcWidthDeg": 120,
+            "maxRange": 120,
+            "filter": "food",
+            "signalType": "nearestDistance"
+        }
     ]
 }

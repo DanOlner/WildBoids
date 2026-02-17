@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/danolner/Code/claude/wildboids/build-release/cmake_install.cmake",
+		"/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-build/cmake_install.cmake",
+		"/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-build/src/cmake_install.cmake",
+		"/Users/danolner/Code/claude/wildboids/build-release/_deps/json-build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

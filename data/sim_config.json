@@ -1,0 +1,38 @@
+{
+    "world": {
+        "width": 800,
+        "height": 800,
+        "toroidal": true,
+        "linearDrag": 0.02,
+        "angularDrag": 0.05,
+        "gridCellSize": 100
+    },
+    "food": {
+        "spawnRate": 5.0,
+        "max": 80,
+        "eatRadius": 10.0,
+        "energy": 15.0
+    },
+    "energy": {
+        "metabolismRate": 0.1,
+        "thrustCost": 0.01
+    },
+    "evolution": {
+        "populationSize": 150,
+        "ticksPerGeneration": 2400,
+        "generations": 100,
+        "saveInterval": 10
+    },
+    "neat": {
+        "addNodeProb": 0.03,
+        "addConnectionProb": 0.05,
+        "weightMutateProb": 0.8,
+        "weightSigma": 0.5,
+        "weightReplaceProb": 0.1,
+        "crossoverProb": 0.75,
+        "compatThreshold": 3.0,
+        "survivalRate": 0.25,
+        "elitism": 1,
+        "maxStagnation": 15
+    }
+}

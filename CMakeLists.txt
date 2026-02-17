@@ -36,6 +36,7 @@ add_library(wildboids_sim
     src/simulation/spatial_grid.cpp
     src/simulation/sensory_system.cpp
     src/io/boid_spec.cpp
+    src/io/sim_config.cpp
     src/brain/direct_wire_network.cpp
     src/brain/neat_genome.cpp
     src/brain/neat_network.cpp
@@ -71,6 +72,8 @@ add_executable(wildboids_tests
     tests/test_population.cpp
     tests/test_food.cpp
     tests/test_evolution.cpp
+    tests/test_headless.cpp
+    tests/test_sim_config.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)
@@ -78,6 +81,13 @@ target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMa
 include(CTest)
 include(Catch)
 catch_discover_tests(wildboids_tests)
+
+# --- Headless evolution runner (no SDL) ---
+add_executable(wildboids_headless
+    src/headless_main.cpp
+)
+
+target_link_libraries(wildboids_headless PRIVATE wildboids_sim)
 
 # --- GUI application (SDL3) ---
 find_package(SDL3 REQUIRED)

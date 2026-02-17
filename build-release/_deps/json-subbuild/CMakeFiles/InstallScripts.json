@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/danolner/Code/claude/wildboids/build-release/_deps/json-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
