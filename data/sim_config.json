@@ -4,7 +4,7 @@
         "height": 800,
         "toroidal": true,
         "linearDrag": 0.02,
-        "angularDrag": 0.75,
+        "angularDrag": 1.75,
         "gridCellSize": 100
     },
     "food": {
@@ -19,7 +19,7 @@
     },
     "evolution": {
         "populationSize": 150,
-        "ticksPerGeneration": 2400,
+        "ticksPerGeneration": 6000,
         "generations": 100,
         "saveInterval": 10
     },

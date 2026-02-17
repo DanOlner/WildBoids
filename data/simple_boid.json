@@ -12,7 +12,7 @@
             "positionY": -0.5,
             "directionX": 0.0,
             "directionY": 1.0,
-            "maxThrust": 20.0
+            "maxThrust": 5.0
         },
         {
             "id": 1,
@@ -21,7 +21,7 @@
             "positionY": -0.4,
             "directionX": 1.0,
             "directionY": 0.0,
-            "maxThrust": 20.0
+            "maxThrust": 4.0
         },
         {
             "id": 2,
@@ -30,7 +30,7 @@
             "positionY": -0.4,
             "directionX": -1.0,
             "directionY": 0.0,
-            "maxThrust": 20.0
+            "maxThrust": 4.0
         },
         {
             "id": 3,
@@ -39,7 +39,7 @@
             "positionY": 0.5,
             "directionX": 0.0,
             "directionY": -1.0,
-            "maxThrust": 20.0
+            "maxThrust": 5.0
         }
     ],
     "sensors": [
