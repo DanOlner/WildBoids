@@ -1,9 +1,12 @@
 #pragma once
 
 #include "simulation/vec2.h"
+#include "simulation/sensor.h"
 #include "simulation/boid.h"
+#include "brain/neat_genome.h"
 #include <string>
 #include <vector>
+#include <optional>
 
 struct ThrusterSpec {
     int id = 0;
@@ -20,6 +23,8 @@ struct BoidSpec {
     float moment_of_inertia = 1.0f;
     float initial_energy = 100.0f;
     std::vector<ThrusterSpec> thrusters;
+    std::vector<SensorSpec> sensors;  // optional — empty if no sensors
+    std::optional<NeatGenome> genome; // optional — absent for boids without a brain
 };
 
 // Load a boid spec from a JSON file. Throws on parse/validation error.

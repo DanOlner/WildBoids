@@ -1,5 +1,5 @@
 {
-    "version": "0.1",
+    "version": "0.2",
     "type": "prey",
     "mass": 1.0,
     "momentOfInertia": 0.5,
@@ -41,5 +41,14 @@
             "directionY": -1.0,
             "maxThrust": 15.0
         }
+    ],
+    "sensors": [
+        { "id": 0, "centerAngleDeg": 0,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 1, "centerAngleDeg": -36,   "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 2, "centerAngleDeg": 36,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 3, "centerAngleDeg": -72,   "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 4, "centerAngleDeg": 72,    "arcWidthDeg": 36, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 5, "centerAngleDeg": -135,  "arcWidthDeg": 90, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" },
+        { "id": 6, "centerAngleDeg": 135,   "arcWidthDeg": 90, "maxRange": 100, "filter": "any", "signalType": "nearestDistance" }
     ]
 }

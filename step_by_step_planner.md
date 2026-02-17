@@ -295,14 +295,17 @@ After Phase 0, we can:
 - **Run everything headless** — no graphics needed, pure library + tests
 - **Iterate on the spec format** — the JSON structure will grow as we add sensors and brains, but the physical base is established
 
-## What comes next (orientation)
+## Phase overview
 
-- **Phase 1**: Simple rendering (SDL3 window, draw boids as triangles, watch them move) — **detailed plan below**
-- **Phase 2**: Spatial grid + toroidal distance functions
-- **Phase 3**: Sensory system (sensor arcs, read from spatial grid)
-- **Phase 4**: Processing network (NEAT or simpler, connecting sensors to thrusters)
-- **Phase 5**: Evolution loop (fitness, selection, crossover, mutation)
-- **Phase 6**: Analytics, data collection, ImGui controls, ImPlot graphs
+| Phase | What | Key deliverable |
+|-------|------|-----------------|
+| 1 | Simple rendering | SDL3 window, boid triangles, fixed timestep — **done** |
+| 2 | Spatial grid | O(1) neighbour queries with toroidal wrapping — **done** |
+| 3 | Sensory system | Sensor arcs → float array of signals per boid — **done** |
+| 4 | NEAT brain | ProcessingNetwork interface → NEAT genome/network → brain-driven boids |
+| 5 | Evolution loop | Mutation, crossover, speciation, food, prey foraging evolution |
+| 5b | Co-evolution | Predator population, arms-race dynamics |
+| 6 | Analytics & UI | ImGui controls, ImPlot graphs, data collection |
 
 Each phase extends what exists without rewriting. The float-array interfaces between layers mean each phase plugs in cleanly.
 
@@ -549,6 +552,685 @@ This is throwaway code — it gets replaced by the sensor→brain→thruster pip
 
 ---
 
+## Phase 2: Spatial grid
+
+**Goal**: Build a uniform-grid spatial index so any system can answer "which boids are near position X?" in O(1). Also centralise toroidal distance into a single utility. This is the foundation for sensors (Phase 3) and collisions (Phase 5).
+
+### Step 2.1 — Toroidal distance utility
+
+Create `src/simulation/toroidal.h` with a single free function:
+
+```cpp
+Vec2 toroidal_delta(Vec2 from, Vec2 to, float world_w, float world_h);
+```
+
+Returns the shortest-path vector from `from` to `to` on the torus. This is the **only** place that knows about wrapping math — sensors, collisions, and all future systems call this instead of computing raw deltas.
+
+Also add `float toroidal_distance_sq(...)` for fast range checks without sqrt.
+
+**Tests:**
+- Delta within half-world returns raw difference
+- Delta across the X wrap boundary returns short path (positive and negative)
+- Delta across the Y wrap boundary returns short path
+- Corner case: delta across both axes simultaneously
+- `toroidal_distance_sq` matches `toroidal_delta(...).length_squared()`
+
+### Step 2.2 — Spatial grid (core)
+
+Create `src/simulation/spatial_grid.h/.cpp`:
+
+```cpp
+class SpatialGrid {
+public:
+    SpatialGrid(float world_w, float world_h, float cell_size, bool toroidal);
+
+    void clear();
+    void insert(int boid_index, Vec2 position);
+    void query(Vec2 pos, float radius,
+               std::vector<int>& out_indices) const;
+
+private:
+    int cols_, rows_;
+    float cell_size_;
+    float world_w_, world_h_;
+    bool toroidal_;
+    std::vector<std::vector<int>> cells_;
+};
+```
+
+**Key design points:**
+- Stores `int` indices into `World::boids_`, **not** pointers (vector reallocation would invalidate them)
+- Cell size should be >= maximum sensor range (placeholder: 100 units for now)
+- Grid rebuilt from scratch every tick (simple, correct, fast for hundreds of boids)
+- For toroidal worlds, query wraps cell indices: `((col % cols_) + cols_) % cols_`
+- Callers do fine-grained distance checks on candidates — the grid provides broad-phase only
+
+**Tests:**
+- Insert N boids, query near each → correct neighbour set
+- Query near world edge → boids on opposite edge returned (toroidal)
+- Query at corner → finds boids across both axis wraps
+- Query with small radius → no false negatives within range
+- `clear()` + fresh insert → no stale data
+- Non-toroidal mode → edge boids not returned across wrap
+
+### Step 2.3 — Integrate grid into World
+
+- `World` gains a `SpatialGrid` member, constructed from `WorldConfig`
+- At the start of `World::step()`, rebuild: `grid_.clear()` then `grid_.insert(i, boids_[i].body.position)` for all boids
+- Expose `const SpatialGrid& grid() const` for sensors to query
+- Existing `World::wrap_position()` should call `toroidal_delta` or at least use consistent math
+
+**Tests:**
+- World with 50 boids: verify grid query returns same neighbours as brute-force all-pairs check
+- Grid is consistent after multiple `World::step()` calls (no stale entries)
+
+### Files to create/modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/simulation/toroidal.h` | Create | `toroidal_delta()`, `toroidal_distance_sq()` |
+| `src/simulation/spatial_grid.h/.cpp` | Create | Uniform grid: insert, query, toroidal wrap |
+| `src/simulation/world.h/.cpp` | Modify | Add grid member, rebuild each tick, expose accessor |
+| `tests/test_toroidal.cpp` | Create | Toroidal distance tests |
+| `tests/test_spatial_grid.cpp` | Create | Grid insert/query/wrap tests |
+
+### Decision points for Phase 2
+
+1. **Cell size**: Use `max_sensor_range` as cell size, or a fixed value? We don't have sensors yet, so pick 100 as placeholder and make it configurable. When sensors arrive, set it to `max(all sensor ranges)`.
+
+2. **Ghost cells vs wrapped index lookup**: Ghost cells (extra ring of cells mirroring opposite edges) simplify queries but complicate insertion. Wrapped index lookup (`((q % cols) + cols) % cols`) is simpler to implement and good enough. Start with wrapped indices; switch to ghost cells only if profiling shows it matters.
+
+3. **Flat vs nested storage**: `vector<vector<int>>` is simple but cache-unfriendly. Alternative: single flat buffer with a fixed max per cell, or a packed array with offsets. Start simple, optimise later if needed.
+
+---
+
+## Phase 3: Sensory system
+
+**Goal**: Give each boid an array of sensors. Each sensor is a wedge-shaped arc that detects nearby boids and returns a normalised float signal. The sensor output array becomes the input to the neural network (Phase 4).
+
+### Step 3.1 — Sensor spec and data types
+
+Create `src/simulation/sensor.h`:
+
+```cpp
+enum class EntityFilter { Prey, Predator, Any };
+enum class SignalType   { NearestDistance, SectorDensity };
+
+struct SensorSpec {
+    int id;
+    float center_angle;   // offset from boid heading (body frame, radians)
+    float arc_width;      // total angular width (radians)
+    float max_range;      // detection radius (world units)
+    EntityFilter filter;
+    SignalType signal_type;
+};
+```
+
+Extend `BoidSpec` and `data/simple_boid.json` to include a `"sensors"` array. JSON uses degrees; C++ converts to radians on load.
+
+**Tests:**
+- Load boid spec with sensors → verify count, angles, ranges parsed correctly
+- Round-trip: save/load preserves sensor specs
+
+### Step 3.2 — Sensory system (perceive)
+
+Create `src/simulation/sensory_system.h/.cpp`:
+
+```cpp
+class SensorySystem {
+public:
+    explicit SensorySystem(std::vector<SensorSpec> specs);
+    int input_count() const;
+
+    void perceive(const std::vector<Boid>& boids,
+                  const SpatialGrid& grid,
+                  const WorldConfig& config,
+                  int self_index,
+                  float* outputs) const;
+
+private:
+    std::vector<SensorSpec> specs_;
+
+    float evaluate_sensor(const SensorSpec& spec,
+                          const std::vector<Boid>& boids,
+                          const SpatialGrid& grid,
+                          const WorldConfig& config,
+                          const Boid& self) const;
+};
+```
+
+**Arc intersection algorithm** for each sensor:
+1. Query `grid.query(self.position, spec.max_range, candidates)`
+2. For each candidate (skip self):
+   - `delta = toroidal_delta(self.position, other.position, ...)`
+   - Distance check: `delta.length_squared() <= max_range²`
+   - Entity filter check
+   - Rotate delta to body frame: `body_delta = delta.rotated(-self.body.angle)`
+   - Angle in body frame: `atan2(body_delta.x, body_delta.y)` (+Y = forward convention)
+   - Arc check: `|angle - center_angle|` within `arc_width / 2` (handle ±π wrap)
+3. Signal output:
+   - **NearestDistance**: `1.0 - (nearest_dist / max_range)`. 1.0 = touching, 0.0 = nothing detected.
+   - **SectorDensity**: `count / expected_max` clamped to [0, 1].
+
+**Tests:**
+- Single boid directly ahead → NearestDistance returns correct normalised value
+- Boid outside arc → signal is 0
+- Boid outside range → signal is 0
+- Self not detected
+- Toroidal wrap: boid across world edge detected by sensor
+- EntityFilter: prey sensor ignores predators
+- Rotated boid: sensor arc moves with heading
+
+### Step 3.3 — Integrate into Boid and World
+
+- `Boid` gains `SensorySystem sensors` and `std::vector<float> sensor_outputs`
+- `World::step()` runs sensor perception after grid rebuild, before brain activation
+- One-tick delay: sensor outputs computed this tick feed the brain *next* tick
+
+**Tests:**
+- World with two boids: verify sensor outputs update each tick
+- Paused boid: sensors still perceive (perception is passive)
+
+### Step 3.4 — Sensor visualisation (renderer)
+
+- Optional sensor arc drawing in `Renderer`, toggled by keypress (S)
+- Draw wedge outlines for each sensor, coloured by signal strength
+- Only for debugging; off by default
+
+### Files to create/modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/simulation/sensor.h` | Create | `SensorSpec`, `EntityFilter`, `SignalType` enums |
+| `src/simulation/sensory_system.h/.cpp` | Create | Arc intersection, signal computation |
+| `src/simulation/boid.h` | Modify | Add sensors + sensor_outputs members |
+| `src/simulation/world.cpp` | Modify | Add perceive step to `World::step()` |
+| `src/io/boid_spec.h/.cpp` | Modify | Parse/save sensor specs from JSON |
+| `data/simple_boid.json` | Modify | Add sensor array |
+| `src/display/renderer.h/.cpp` | Modify | Optional sensor arc drawing |
+| `tests/test_sensor.cpp` | Create | Sensor signal tests |
+| `tests/test_sensory_system.cpp` | Create | Integration tests with grid + world |
+
+### Decision points for Phase 3
+
+1. **How many sensors for the default boid?** A reasonable starting set: 5 forward-facing arcs (covering ~180° ahead, 36° each) + 2 rear arcs (covering ~180° behind). Each with NearestDistance for prey. ~7 sensors = 7 floats input to brain.
+
+2. **Signal normalisation convention**: `1.0 = close, 0.0 = nothing` is intuitive for "danger nearby" signals. Confirm this is the right polarity for the network.
+
+3. **Sensor arc size in the renderer**: Small wedge outlines or filled wedges? Outlines are cheaper and less cluttered.
+
+---
+
+## Phase 4: NEAT brain
+
+**Goal**: Build a feed-forward NEAT network that reads sensor outputs and writes thruster commands. This phase gets a *single* brain working end-to-end (sensors → network → thrusters). Phase 5 then gets a *population* of brains evolving. Testing them separately makes debugging tractable.
+
+Brain code lives in `src/brain/` — a new directory, separate from `src/simulation/`. The brain layer communicates with sensors and thrusters only via float arrays, matching the loose-coupling architecture from [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md).
+
+### Step 4.1 — ProcessingNetwork interface + Direct-Wire smoke test
+
+**What:** Define the `ProcessingNetwork` abstract interface and implement a trivial `DirectWireNetwork` that maps sensor outputs straight to thruster inputs with a fixed weight matrix. This is a test fixture (like `apply_random_wander()`), not a real brain — it proves the plumbing works before we add NEAT.
+
+```cpp
+// src/brain/processing_network.h
+class ProcessingNetwork {
+public:
+    virtual ~ProcessingNetwork() = default;
+    virtual void activate(const float* inputs, int n_in,
+                          float* outputs, int n_out) = 0;
+    virtual void reset() = 0;
+};
+
+// src/brain/direct_wire_network.h  (test fixture, not evolved)
+class DirectWireNetwork : public ProcessingNetwork {
+public:
+    DirectWireNetwork(int n_in, int n_out);
+    void set_weight(int in, int out, float w);
+    void activate(const float* inputs, int n_in,
+                  float* outputs, int n_out) override;
+    void reset() override {}
+private:
+    int n_in_, n_out_;
+    std::vector<float> weights_;  // n_in × n_out, row-major
+    std::vector<float> biases_;   // n_out
+};
+```
+
+**Tests:**
+- Hand-set weights so that the forward sensor drives the rear thruster. Place two boids in a world, step the simulation, verify that the boid with a brain-driven thruster moves toward the detected boid. This is the first time sensors → brain → thrusters → physics runs end-to-end.
+- Edge cases: more sensors than thrusters, fewer sensors than thrusters, all-zero inputs, all-one inputs.
+
+**Replaces:** `apply_random_wander()` in `App` with brain-driven control for boids that have a `ProcessingNetwork`.
+
+### Step 4.2 — NEAT genome data types
+
+**What:** Define the genome representation — the genotype that encodes a network but *isn't* a network itself.
+
+```cpp
+// src/brain/neat_genome.h
+enum class NodeType { Input, Output, Hidden };
+enum class ActivationFn { Sigmoid, Tanh, ReLU, Linear };
+
+struct NodeGene {
+    int id;
+    NodeType type;
+    ActivationFn activation = ActivationFn::Sigmoid;
+    float bias = 0.0f;
+};
+
+struct ConnectionGene {
+    int innovation;
+    int source, target;
+    float weight = 0.0f;
+    bool enabled = true;
+};
+
+struct NeatGenome {
+    std::vector<NodeGene> nodes;
+    std::vector<ConnectionGene> connections;
+
+    // Create minimal topology: direct input→output, no hidden nodes
+    static NeatGenome minimal(int n_inputs, int n_outputs,
+                              int& next_innovation);
+};
+```
+
+Start with static weights — no Hebbian plasticity. Modulatory neurons and ABCD learning rules can be added later as a genome extension without changing the core (see [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md) Option C).
+
+**Tests:**
+- `NeatGenome::minimal(7, 4, ...)` produces 11 nodes (7 input + 4 output) and 28 connections (fully connected), each with a unique innovation number
+- Nodes have correct types
+- Connections link inputs to outputs only (no input→input, no output→output)
+
+**No network activation yet** — this is pure data.
+
+### Step 4.3 — Network activation (phenotype from genotype)
+
+**What:** Build a `NeatNetwork` (the phenotype) from a `NeatGenome` (the genotype). This is the runtime network that actually computes `inputs → outputs`. It implements `ProcessingNetwork`.
+
+```cpp
+// src/brain/neat_network.h
+class NeatNetwork : public ProcessingNetwork {
+public:
+    explicit NeatNetwork(const NeatGenome& genome);
+    void activate(const float* inputs, int n_in,
+                  float* outputs, int n_out) override;
+    void reset() override;
+private:
+    // Nodes in topological evaluation order
+    struct RuntimeNode { float bias; ActivationFn activation; float value = 0; };
+    std::vector<RuntimeNode> nodes_;
+    struct RuntimeConnection { int source, target; float weight; };
+    std::vector<RuntimeConnection> connections_;
+    std::vector<int> input_ids_, output_ids_;
+    std::vector<int> eval_order_;  // topological sort of hidden + output nodes
+};
+```
+
+The key algorithm is **topological sorting** of the network graph. For a minimal genome (no hidden nodes), this is trivial — outputs depend only on inputs. As hidden nodes are added later, the sort handles arbitrary DAGs. Recurrent connections (cycles) are detected and deferred to the next activation step.
+
+**Tests:**
+- Minimal genome (7→4): set all weights to 0 → outputs are sigmoid(0) = 0.5 for all thrusters
+- Set one weight to a large positive value → corresponding output saturates toward 1.0
+- Set one weight to a large negative value → corresponding output saturates toward 0.0
+- Manually construct a genome with one hidden node → verify it activates correctly (input → hidden → output, two-layer propagation)
+- Compare `NeatNetwork` output with `DirectWireNetwork` output on the same weight matrix — they should match for the minimal (no-hidden-node) case
+
+**This is the moment NEAT-at-generation-0 becomes equivalent to DirectWireNetwork.** The smoke test from Step 4.1 and the NEAT network should produce identical results given identical weights.
+
+### Step 4.4 — Genome JSON serialisation
+
+Extend `src/io/boid_spec.h/.cpp`:
+- `NeatGenome` serialises as `"genome": { "nodes": [...], "connections": [...] }` inside the boid spec
+- Innovation numbers preserved (critical for crossover in Phase 5)
+- This means a full boid spec JSON now has: physical props + thrusters + sensors + genome
+
+**Tests:**
+- Save boid with genome → load → network produces identical outputs
+- Missing genome field → boid created with no network (graceful fallback)
+
+### Step 4.5 — Integration — brain-driven boids in the World
+
+**What:** Wire `NeatNetwork` into `Boid` so that `World::step()` runs the sense→think→act pipeline.
+
+`Boid` gains `std::unique_ptr<ProcessingNetwork> brain`. The world step becomes:
+
+```
+1. Physics (existing)
+2. Wrap positions (existing)
+3. Rebuild grid (existing)
+4. Run sensors (existing)
+5. Run brains (NEW) — for each boid with a brain:
+   brain->activate(sensor_outputs.data(), n_sensors,
+                   thruster_commands.data(), n_thrusters);
+   // Map commands [0,1] → thruster power [0,1]
+   for (int i = 0; i < n_thrusters; i++)
+       thrusters[i].power = thruster_commands[i];
+```
+
+**Tests:**
+- Create a boid from `simple_boid.json`, attach a minimal `NeatGenome`, build its `NeatNetwork`. Step the world. Verify thrusters receive non-zero power (sigmoid(0) = 0.5 for all, since initial weights are 0).
+- Hand-tune weights so the front sensor drives the rear thruster. Place a target boid ahead. Verify the boid accelerates toward it.
+- Verify that boids *without* a brain (no `ProcessingNetwork`) still work — `apply_random_wander()` or no thrust. Backwards compatibility with the existing demo.
+
+**This is the full pipeline working for the first time.** From here, everything is about making the brains *better* through evolution.
+
+### Files to create/modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/brain/processing_network.h` | Create | Abstract interface: `activate(inputs, outputs)` |
+| `src/brain/direct_wire_network.h/.cpp` | Create | Test fixture: fixed weight matrix, no evolution |
+| `src/brain/neat_genome.h` | Create | `NeatGenome`, `NodeGene`, `ConnectionGene` structs |
+| `src/brain/neat_network.h/.cpp` | Create | Feed-forward activation, topological sort, implements `ProcessingNetwork` |
+| `src/simulation/boid.h` | Modify | Add `std::unique_ptr<ProcessingNetwork> brain` |
+| `src/simulation/world.cpp` | Modify | Add brain activation step after sensors |
+| `src/io/boid_spec.h/.cpp` | Modify | Genome JSON parse/save |
+| `src/display/app.cpp` | Modify | Keep random wander as fallback for boids without brain |
+| `CMakeLists.txt` | Modify | Add `src/brain/` files to sim library |
+| `tests/test_direct_wire.cpp` | Create | DirectWireNetwork smoke test |
+| `tests/test_neat_genome.cpp` | Create | Genome construction, minimal topology |
+| `tests/test_neat_network.cpp` | Create | Activation correctness, hidden nodes, comparison with DirectWire |
+| `tests/test_boid_brain.cpp` | Create | Integration: sensor → network → thruster → physics |
+
+### Decision points for Phase 4
+
+1. **Feed-forward vs recurrent**: Start feed-forward (DAG only). Recurrent NEAT (CTRNN) is more powerful but harder to implement. Can add later by allowing cycles in the topology and using a different activation strategy.
+
+2. **Activation function per-node or global?** Per-node (stored in `NodeGene`). NEAT traditionally allows each node to have its own activation. Default to Sigmoid for output nodes (gives [0,1] for thruster power), Tanh for hidden nodes.
+
+3. **Output clamping**: Use sigmoid on output nodes so outputs are naturally in [0,1] for thruster commands.
+
+4. **Brain ownership**: `std::unique_ptr<ProcessingNetwork>` on `Boid` — polymorphic so `DirectWireNetwork` and `NeatNetwork` are interchangeable behind the same interface.
+
+---
+
+## Phase 5: Evolution loop
+
+**Goal**: Implement the NEAT evolutionary cycle — mutation, crossover, speciation, food, energy, fitness — and run the first real evolutionary experiment: prey foraging for food.
+
+The split from Phase 4 is deliberate: Phase 4 gets a *single* brain working. Phase 5 gets a *population* of brains evolving. These are different kinds of complexity — one is wiring, the other is population dynamics.
+
+### Step 5.1 — Mutation operators
+
+**What:** Implement the NEAT mutation functions that modify a genome.
+
+| Operator | What It Does |
+|----------|-------------|
+| `mutate_weights(genome, rng)` | Perturb or replace connection weights (Gaussian noise) |
+| `mutate_add_connection(genome, rng, innovation_tracker)` | Add a new connection between two unconnected nodes |
+| `mutate_add_node(genome, rng, innovation_tracker)` | Split an existing connection, insert a hidden node |
+| `mutate_toggle_connection(genome, rng)` | Enable/disable a random connection |
+| `mutate_delete_connection(genome, rng)` | Remove a connection (pruning — not in original NEAT but we want it) |
+
+The **innovation tracker** is a global counter + lookup table: "has the mutation source→target been seen before this generation?" If yes, reuse the innovation number. If no, assign a new one. This is essential for meaningful crossover.
+
+```cpp
+// src/brain/innovation_tracker.h
+class InnovationTracker {
+public:
+    int get_or_create(int source_node, int target_node);
+    void new_generation();
+
+private:
+    int next_innovation_ = 1;
+    std::map<std::pair<int,int>, int> this_gen_cache_;
+};
+```
+
+**Tests:**
+- Innovation tracker: same pair → same innovation number; different pair → different number; after `new_generation()`, same pair gets a new number
+- `mutate_weights`: verify weights change, verify they stay within bounds
+- `mutate_add_connection`: verify a new connection appears with a new innovation number. Verify it doesn't create duplicates. Verify it works when the network is already fully connected (should be a no-op).
+- `mutate_add_node`: verify the original connection is disabled, two new connections appear (source→new_node, new_node→target), the new node exists. Verify the new node has weight 1.0 on the incoming connection and the original weight on the outgoing connection (NEAT convention — preserves existing behavior).
+- `mutate_toggle_connection`: verify enabled/disabled flips
+- `mutate_delete_connection`: verify connection is removed. Verify orphaned nodes (no remaining connections) are cleaned up.
+- Mutate a genome, build a `NeatNetwork` from the mutated genome, verify it still activates without crashing. (Structural validity.)
+
+### Step 5.2 — Crossover
+
+**What:** Combine two parent genomes into an offspring genome using NEAT's innovation-number alignment.
+
+```cpp
+NeatGenome crossover(const NeatGenome& fitter_parent,
+                     const NeatGenome& other_parent,
+                     std::mt19937& rng);
+```
+
+Matching genes (same innovation number): randomly pick from either parent.
+Disjoint/excess genes: inherit from the fitter parent only.
+Disabled in either parent → 75% chance disabled in offspring.
+
+**Tests:**
+- Two identical genomes → offspring is identical
+- Parent A has connection [innovation=5] that Parent B lacks → offspring has it (A is fitter)
+- Both parents have connection [innovation=3] → offspring gets it from one or the other (check over many trials that it's roughly 50/50)
+- Crossover of genomes with different hidden nodes → offspring genome is structurally valid (no dangling connections, no duplicate innovations)
+- Build `NeatNetwork` from crossover offspring → activates without crashing
+
+### Step 5.3 — Speciation + Population management
+
+**What:** The evolutionary loop that manages a population of genomes across generations.
+
+Components:
+- **Compatibility distance** δ between two genomes (count disjoint/excess genes + mean weight difference)
+- **Species assignment**: group genomes into species by δ threshold
+- **Fitness sharing**: divide each genome's fitness by its species size (prevents one species from dominating)
+- **Selection**: tournament selection within species
+- **Reproduction**: crossover + mutation → offspring. Elitism (best genome per species survives unchanged).
+- **Generation cycle**: evaluate all → speciate → select → reproduce → repeat
+
+Compatibility distance:
+```
+δ = (c1 * E / N) + (c2 * D / N) + c3 * W̄
+```
+Where E = excess genes, D = disjoint genes, W̄ = mean weight diff of matching genes, N = max genome size, and c₁, c₂, c₃ are tunable coefficients.
+
+```cpp
+// src/brain/population.h
+class Population {
+public:
+    Population(NeatGenome seed, int pop_size, PopulationParams params);
+    void evaluate(std::function<float(NeatGenome&)> fitness_fn);
+    void advance_generation();
+    const NeatGenome& best_genome() const;
+    int generation() const;
+    int species_count() const;
+};
+```
+
+**Tests:**
+- Create population of 50 from a minimal seed genome. Verify all are in one species initially.
+- Assign random fitness. Advance one generation. Verify population size is preserved.
+- Advance 10 generations. Verify species count > 1 (mutations should create diversity).
+- Compatibility distance: identical genomes → δ = 0; genomes differing only in weights → δ = c3 * mean_weight_diff; genome with extra connections → δ includes excess/disjoint terms.
+- **XOR benchmark** (NEAT's classic test): 2 inputs + 1 bias → 1 output. Fitness = accuracy on the 4 XOR cases. Verify that NEAT solves it within ~100 generations. This is the acid test — if our NEAT can't solve XOR, something is fundamentally wrong. (XOR requires at least one hidden node, so this tests structural mutation + speciation working together.)
+
+### Step 5.4 — Food, energy, and prey fitness
+
+**What:** Add food to the world and give prey boids a reason to move.
+
+This is where the simulation stops being a physics demo and becomes an evolutionary system.
+
+**Food mechanics:**
+- Food is a set of points in the world, randomly placed
+- When a prey boid's position is within `eat_radius` of a food point, it gains energy and the food is consumed
+- New food spawns at a configurable rate (random positions) to maintain a target density
+- Food appears on the renderer as small dots (simple — just coloured points)
+
+```cpp
+struct Food { Vec2 position; float energy_value = 10.0f; };
+
+// In WorldConfig:
+float food_spawn_rate = 2.0f;      // new food per second
+int food_max = 100;                 // cap
+float food_eat_radius = 8.0f;      // how close to eat
+float food_energy = 10.0f;         // energy per food item
+
+// World gains:
+std::vector<Food> food_;
+void spawn_food(std::mt19937& rng);
+void check_food_eating();           // called each step
+```
+
+**Energy and fitness:**
+- Prey boids start with `initial_energy` (from spec, currently 100)
+- Each simulation step costs a small amount of energy (metabolism): `energy -= metabolism_rate * dt`
+- Thruster usage costs energy proportional to thrust: `energy -= thrust_cost * power * dt`
+- Eating food adds energy
+- When energy reaches 0, the boid dies (removed from simulation or flagged inactive)
+- **Fitness = total energy accumulated over lifetime** (not just survival time — rewards active foraging over sitting still)
+
+**Tests:**
+- Place food at a known position, place a boid nearby with a brain that fires the rear thruster. Step until the boid reaches the food. Verify energy increases.
+- Verify food disappears when eaten and respawns.
+- Verify boid with zero energy stops being active.
+- Boid with high thrust runs out of energy faster.
+- Run a population of 50 prey for one generation (6000 ticks). Verify fitness values are non-zero and vary across individuals. Verify the best-fitness boid found more food than the worst.
+
+**Why food before predators?** Prey need a fitness signal to evolve *toward* something. Without food, fitness is just "survive longer" which rewards inactivity. With food, fitness rewards movement, sensor use, and navigation — exactly the behaviors we want the brain to discover. Once prey can forage, we have a working evolutionary system. Predators layer on top of that.
+
+### Step 5.5 — Prey evolution — the first real test
+
+**What:** Run the full evolutionary loop with prey boids foraging for food. No predators yet.
+
+This is the first time we see whether the entire stack — sensors, NEAT brains, thrusters, physics, food, energy, fitness, speciation, mutation, crossover — produces emergent behavior.
+
+**Setup:**
+- 150 prey boids, all starting from the same minimal genome (7 sensors → 4 thrusters, no hidden nodes)
+- World with toroidal wrapping, food spawning at steady state
+- Each generation: reset world, spawn boids at random positions, run for 6000 ticks (~50 seconds at 120Hz), record fitness = total energy gathered
+- Advance generation, repeat
+
+**What to look for:**
+- **Generation 0:** Boids move randomly (sigmoid(0) ≈ 0.5 on all thrusters, slight asymmetries from initial weight noise). Some stumble onto food by chance. Fitness is low and uniform.
+- **Generation 10–30:** Weight evolution kicks in. Boids that happen to move forward (rear thruster > 0.5) find more food. Forward-moving genes spread.
+- **Generation 30–100:** Sensor-thruster correlations emerge. Boids that turn toward detected food (front sensors driving differential steering) outcompete straight-line movers. Species with different foraging strategies appear.
+- **Generation 100+:** If NEAT is working, hidden nodes appear in some genomes. These could enable "turn left when food is on the left AND nothing is ahead" — conditional logic that direct input→output mappings can't express.
+
+**Test (automated):**
+- Mean fitness increases over generations (not necessarily monotonically, but trending up)
+- At least 2 species exist by generation 50
+- Best-of-generation fitness at generation 100 is significantly higher than generation 0
+- Best genome, when run in the renderer, visibly forages (moves, turns toward food, eats)
+
+**This is the validation milestone.** If prey evolve to forage, the entire architecture works. Everything after this is enrichment.
+
+### Step 5.6 — Headless runner
+
+Create a `wildboids_headless` CMake target (no SDL dependency) that runs evolution from command line:
+
+```
+./wildboids_headless --generations 100 --seed 42 --config data/sim_config.json
+```
+
+Outputs: generation stats to stdout, saves champion genomes to JSON periodically.
+
+**Tests:**
+- Headless runner completes N generations without crash
+- Saved champion genome loads and produces a valid network
+
+### Files to create/modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/brain/innovation_tracker.h/.cpp` | Create | Innovation number registry |
+| `src/brain/mutation.h/.cpp` | Create | Weight perturbation, add connection, add node, toggle, delete |
+| `src/brain/crossover.h/.cpp` | Create | Innovation-number-aligned genome crossover |
+| `src/brain/speciation.h/.cpp` | Create | Compatibility distance, species assignment |
+| `src/brain/population.h/.cpp` | Create | Population management, fitness sharing, generation cycle |
+| `src/simulation/food.h` | Create | `Food` struct |
+| `src/simulation/boid.h` | Modify | Add `fitness`, `alive` fields |
+| `src/simulation/world.h/.cpp` | Modify | Add food spawning, eating, energy deduction |
+| `src/display/renderer.h/.cpp` | Modify | Draw food as dots |
+| `src/headless_main.cpp` | Create | CLI evolution runner |
+| `CMakeLists.txt` | Modify | Add `wildboids_headless` target, new brain/sim files |
+| `data/sim_config.json` | Create | Default evolution/sim parameters |
+| `tests/test_innovation.cpp` | Create | Innovation tracker tests |
+| `tests/test_mutation.cpp` | Create | Mutation operator tests |
+| `tests/test_crossover.cpp` | Create | Crossover correctness tests |
+| `tests/test_speciation.cpp` | Create | Compatibility distance, species assignment |
+| `tests/test_population.cpp` | Create | Population management, generation cycle, XOR benchmark |
+| `tests/test_food.cpp` | Create | Food spawning, eating, energy tests |
+
+### Decision points for Phase 5
+
+1. **Fixed vs variable generation length**: Fixed (6000 ticks) is simpler for data analysis. Dead boids stop simulating but their fitness is recorded.
+
+2. **Population sizes**: Start with prey-only evolution (150 boids) to validate the pipeline. Add predators once prey evolve interesting behaviour.
+
+3. **Elitism strategy**: Standard NEAT: 1 champion per species survives unchanged.
+
+4. **Population parameters (starting values):**
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Population size | 150 | Per species |
+| Species target | 8–15 | Adjust compatibility threshold to maintain |
+| Survival rate | 25% | Top quarter of each species breeds |
+| Elitism | 1 per species | Best organism always survives |
+| Selection | Tournament, k=2 | Within species |
+| Compatibility threshold (δ_t) | 3.0–6.0 | Tune based on speciation dynamics |
+
+---
+
+## Phase 5b: Co-evolution
+
+**Goal**: Add a separate predator population that co-evolves alongside prey.
+
+### Predator mechanics
+
+- Predators have their own boid spec (potentially different sensors/thrusters, different brain)
+- Predators gain energy by catching prey (position within `catch_radius`)
+- Caught prey die (removed from that generation's simulation)
+- Predator fitness = total prey caught (or total energy from prey)
+- Predator metabolism is higher than prey (must hunt to survive)
+
+### Co-evolution structure
+
+- Two separate `Population` objects, each evolving independently
+- Both share the same world during evaluation
+- Prey fitness is affected by predators (dying early = less foraging time = lower fitness)
+- Predator fitness is affected by prey behavior (smarter prey = harder to catch)
+- This creates an arms race: prey evolve evasion, predators evolve pursuit, prey evolve better evasion...
+
+### Tests
+
+- Run with predators present. Verify prey mean fitness drops compared to no-predator runs (predation pressure exists).
+- Verify predator mean fitness increases over generations (they get better at catching prey).
+- Over many generations, verify that prey evolve visibly different behavior when predators are present vs absent (evasion vs pure foraging).
+
+### When to add predators
+
+After prey can be seen evolving navigational behaviour (turning toward/away from things). Predators need prey that actually move interestingly, or the co-evolutionary arms race has no starting point.
+
+---
+
+## Future phases: Plasticity, neuromodulation, and beyond
+
+Once co-evolution is working:
+
+- **Add plasticity parameters** (α, η, A, B, C, D) to `ConnectionGene`, initially all zero. Let mutation discover non-zero values. Compare fitness trajectories with and without plasticity enabled. See [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md) Option C for full design.
+- **Add neuromodulation** (modulatory node type). See if evolution discovers useful modulatory circuits.
+- **Evolve sensor parameters** (currently fixed in JSON). Unlock center_angle, arc_width, max_range as evolvable genes. See if prey and predators evolve different sensory layouts.
+- **Evolve thruster layout** (the "mutable" flag from boid_theory.md). See if body plans diverge.
+
+Each of these is its own evolutionary experiment, built on the working foundation from Phases 4–5b.
+
+---
+
+## Phase 6: Analytics and ImGui (future — not yet detailed)
+
+- ImGui overlay for live parameter tweaking
+- ImPlot for fitness graphs, species counts, weight distributions
+- DataCollector class sampling metrics at generation boundaries
+- Population save/load for resuming runs
+- Camera pan/zoom for large worlds
+
+This phase will be planned in detail when Phases 4–5b are complete.
+
+---
+
 ## Decision points for Phase 0
 
 A few things to decide before or during implementation:
@@ -634,3 +1316,68 @@ The original `Thruster::torque()` crossed `local_position` (body frame) with `lo
 - Random wander lives in `App::apply_random_wander()` — throwaway pre-brain behaviour, clearly temporary.
 
 **28 tests still passing** (simulation library unchanged apart from torque fix).
+
+### Phase 2 — completed [17.2.26]
+
+Spatial grid and toroidal distance utility implemented. 42 tests, all passing (28 original + 5 toroidal + 9 spatial grid).
+
+**Files created/modified:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/simulation/toroidal.h` | Created | `toroidal_delta()` and `toroidal_distance_sq()` — single source of truth for toroidal wrapping math |
+| `src/simulation/spatial_grid.h` | Created | `SpatialGrid` class: uniform grid with insert, query, clear |
+| `src/simulation/spatial_grid.cpp` | Created | Grid implementation: wrapped index lookup for toroidal queries |
+| `src/simulation/world.h` | Modified | Added `SpatialGrid grid_` member, `grid()` accessor, `rebuild_grid()`, `grid_cell_size` to `WorldConfig` |
+| `src/simulation/world.cpp` | Modified | Grid rebuilt at end of each `step()` call |
+| `CMakeLists.txt` | Modified | Added `spatial_grid.cpp` to sim library, new test files |
+| `tests/test_toroidal.cpp` | Created | 5 tests: within-range delta, X wrap, Y wrap, corner wrap, distance_sq consistency |
+| `tests/test_spatial_grid.cpp` | Created | 9 tests: basic query, X/Y/corner wrapping, clear, non-toroidal, small radius, brute-force validation against 50 boids, multi-step consistency |
+
+**Decisions resolved:**
+- **Wrapped index lookup** (not ghost cells) — simpler to implement, good enough for current scale.
+- **`vector<vector<int>>`** cell storage — simple, optimise later if profiling shows it matters.
+- **Cell size configurable** via `WorldConfig::grid_cell_size` (default 100 world units). Will be set to `max(sensor ranges)` when sensors arrive.
+- **Stores `int` indices** into the boids vector, not pointers — avoids iterator invalidation on vector reallocation.
+
+**Brute-force validation test:** The key integration test spawns 50 boids at random positions, queries each with radius 150, and verifies that every boid found by brute-force all-pairs toroidal distance check is also returned by the grid query. This confirms no false negatives.
+
+**Note:** `data/simple_boid.json` rear thruster `maxThrust` had been manually changed from 50 to 15 during Phase 1 renderer tweaking — restored to 50 to match the existing test expectations.
+
+**Visual debug: neighbour lines [17.2.26]**
+
+Added all-pairs neighbour line rendering to visually verify the spatial grid and toroidal wrapping. Press **D** to toggle. For each boid pair within `NEIGHBOUR_RADIUS` (100 world units), a blue line is drawn using `toroidal_delta` so connections across world edges take the short path. Confirms toroidal wrapping works correctly at boundaries — lines visibly connect boids across opposite edges. Maximum meaningful radius is `min(world_w, world_h) / 2` (400 for 800×800 world); beyond that, `toroidal_delta` can't distinguish directions. Files modified: `renderer.h/.cpp` (new `draw_neighbour_lines` method + toggle), `app.cpp` (D key handler).
+
+### Phase 3 — completed [17.2.26]
+
+Sensory system implemented. Each boid has an array of wedge-shaped sensor arcs that detect nearby boids and output normalised float signals. 56 tests, all passing (42 previous + 14 new).
+
+**Files created/modified:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/simulation/sensor.h` | Created | `SensorSpec`, `EntityFilter`, `SignalType` enums, `angle_in_arc()` utility for ±π-safe arc containment check |
+| `src/simulation/sensory_system.h` | Created | `SensorySystem` class: holds sensor specs, runs perception |
+| `src/simulation/sensory_system.cpp` | Created | Arc intersection algorithm: grid query → distance check → body-frame angle → arc check → signal output |
+| `src/simulation/boid.h` | Modified | Added `std::optional<SensorySystem> sensors` and `std::vector<float> sensor_outputs` |
+| `src/simulation/world.h/.cpp` | Modified | Added `run_sensors()` step after grid rebuild in `World::step()` |
+| `src/io/boid_spec.h` | Modified | Added `std::vector<SensorSpec> sensors` to `BoidSpec` |
+| `src/io/boid_spec.cpp` | Modified | Parse/save sensor specs from JSON (degrees in JSON ↔ radians in C++), `create_boid_from_spec` wires up `SensorySystem` |
+| `data/simple_boid.json` | Modified | Version bumped to 0.2, added 7 sensors: 5 forward arcs (36° each at 0°, ±36°, ±72°) + 2 rear arcs (90° each at ±135°) |
+| `src/display/renderer.h/.cpp` | Modified | Sensor arc visualisation: wedge outlines (radial lines + arc curve), coloured by signal strength (dim cyan → bright yellow-green) |
+| `src/display/app.cpp` | Modified | **S** key toggles sensor arc display |
+| `CMakeLists.txt` | Modified | Added `sensory_system.cpp` to sim library, `test_sensor.cpp` to tests |
+| `tests/test_sensor.cpp` | Created | 14 tests: `angle_in_arc` (center/edge/outside/wrap), perception (ahead/outside-arc/outside-range/self/toroidal-wrap/entity-filter/rotated-boid/sector-density/multi-sensor/world-integration) |
+| `tests/test_boid_spec.cpp` | Modified | Updated version check to "0.2", added sensor count/angle/filter/signal-type checks, sensor round-trip verification |
+
+**Keyboard controls now:** Space (pause), T (thrusters), D (neighbour lines), S (sensor arcs), Escape (quit).
+
+**Decisions resolved:**
+- **7 sensors** for the default boid: 5 forward-facing 36° arcs covering ±90° ahead, plus 2 wide 90° rear arcs. All `NearestDistance` signal type, `Any` entity filter, 100 world unit range. This gives 7 floats as neural network input.
+- **Signal convention**: `1.0 = touching, 0.0 = nothing detected` (inverse distance normalisation). `SectorDensity` normalises by expected max of 10.
+- **Sensor arc rendering**: Wedge outlines (two radial lines + segmented arc curve, 12 segments per arc). Drawn behind the boid triangle so the boid body stays visible on top.
+- **JSON format**: Sensors use degrees (`centerAngleDeg`, `arcWidthDeg`) for human readability; C++ converts to radians on load. `filter` and `signalType` are optional string fields with sensible defaults.
+- **Sensors are optional** on `Boid` via `std::optional<SensorySystem>` — boids without sensors (e.g. from old JSON specs) still work.
+- **Perception runs after grid rebuild** in `World::step()`, giving sensors access to current-tick positions. One-tick delay: sensor outputs computed this tick will feed the brain next tick (Phase 4).
+
+**Algorithm summary:** For each sensor on each boid: query spatial grid within `max_range` → for each candidate (skip self, apply entity filter) → compute `toroidal_delta` → distance check → rotate delta into body frame (`delta.rotated(-self.angle)`) → compute body-frame angle via `atan2(x, y)` (+Y = forward) → check against sensor arc via `angle_in_arc()` → accumulate nearest distance or count.

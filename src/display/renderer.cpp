@@ -1,7 +1,9 @@
 #include "display/renderer.h"
+#include "simulation/toroidal.h"
 #include <stdexcept>
 #include <cmath>
 #include <array>
+#include <vector>
 
 Renderer::Renderer(int window_width, int window_height, const char* title)
     : window_width_(window_width), window_height_(window_height)
@@ -56,10 +58,17 @@ void Renderer::draw(const World& world) {
     const auto& config = world.get_config();
 
     for (const auto& boid : world.get_boids()) {
+        if (show_sensors_) {
+            draw_sensor_arcs(boid, config);
+        }
         draw_boid(boid, config);
         if (show_thrusters_) {
             draw_thruster_indicators(boid, config);
         }
+    }
+
+    if (show_neighbours_) {
+        draw_neighbour_lines(world);
     }
 }
 
@@ -120,5 +129,94 @@ void Renderer::draw_thruster_indicators(const Boid& boid, const WorldConfig& con
             world_to_screen_y(world_pos.y, config),
             world_to_screen_x(end_pos.x, config),
             world_to_screen_y(end_pos.y, config));
+    }
+}
+
+void Renderer::draw_neighbour_lines(const World& world) {
+    const auto& config = world.get_config();
+    const auto& boids = world.get_boids();
+    const auto& grid = world.grid();
+    const float radius_sq = NEIGHBOUR_RADIUS * NEIGHBOUR_RADIUS;
+
+    SDL_SetRenderDrawColor(renderer_, 60, 120, 200, 120);
+
+    std::vector<int> candidates;
+    for (int i = 0; i < static_cast<int>(boids.size()); ++i) {
+        Vec2 pos_a = boids[i].body.position;
+
+        candidates.clear();
+        grid.query(pos_a, NEIGHBOUR_RADIUS, candidates);
+
+        for (int j : candidates) {
+            if (j <= i) continue; // draw each pair once
+
+            Vec2 delta = toroidal_delta(pos_a, boids[j].body.position,
+                                        config.width, config.height);
+            if (delta.length_squared() > radius_sq) continue;
+
+            // Draw line from boid i to (boid i + delta) — correct for toroidal
+            Vec2 end = pos_a + delta;
+
+            SDL_RenderLine(renderer_,
+                world_to_screen_x(pos_a.x, config),
+                world_to_screen_y(pos_a.y, config),
+                world_to_screen_x(end.x, config),
+                world_to_screen_y(end.y, config));
+        }
+    }
+}
+
+void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
+    if (!boid.sensors) return;
+
+    const auto& specs = boid.sensors->specs();
+    for (int si = 0; si < static_cast<int>(specs.size()); ++si) {
+        const auto& spec = specs[si];
+        float signal = (si < static_cast<int>(boid.sensor_outputs.size()))
+                       ? boid.sensor_outputs[si] : 0.0f;
+
+        // Colour: dim cyan when no signal, bright yellow-green when detecting
+        Uint8 r = static_cast<Uint8>(signal * 200);
+        Uint8 g = static_cast<Uint8>(80 + signal * 175);
+        Uint8 b = static_cast<Uint8>(120 * (1.0f - signal));
+        SDL_SetRenderDrawColor(renderer_, r, g, b, 180);
+
+        float world_angle = boid.body.angle; // boid heading
+        float arc_start = world_angle + spec.center_angle - spec.arc_width * 0.5f;
+        float arc_end   = world_angle + spec.center_angle + spec.arc_width * 0.5f;
+        float range = spec.max_range;
+
+        Vec2 pos = boid.body.position;
+
+        // Draw arc outline: two radial lines + arc segments
+        // Start radial line
+        Vec2 start_dir = Vec2{0, range}.rotated(arc_start);
+        SDL_RenderLine(renderer_,
+            world_to_screen_x(pos.x, config),
+            world_to_screen_y(pos.y, config),
+            world_to_screen_x(pos.x + start_dir.x, config),
+            world_to_screen_y(pos.y + start_dir.y, config));
+
+        // End radial line
+        Vec2 end_dir = Vec2{0, range}.rotated(arc_end);
+        SDL_RenderLine(renderer_,
+            world_to_screen_x(pos.x, config),
+            world_to_screen_y(pos.y, config),
+            world_to_screen_x(pos.x + end_dir.x, config),
+            world_to_screen_y(pos.y + end_dir.y, config));
+
+        // Arc curve segments
+        float step = (arc_end - arc_start) / SENSOR_ARC_SEGMENTS;
+        for (int seg = 0; seg < SENSOR_ARC_SEGMENTS; ++seg) {
+            float a0 = arc_start + step * seg;
+            float a1 = arc_start + step * (seg + 1);
+            Vec2 p0 = pos + Vec2{0, range}.rotated(a0);
+            Vec2 p1 = pos + Vec2{0, range}.rotated(a1);
+            SDL_RenderLine(renderer_,
+                world_to_screen_x(p0.x, config),
+                world_to_screen_y(p0.y, config),
+                world_to_screen_x(p1.x, config),
+                world_to_screen_y(p1.y, config));
+        }
     }
 }

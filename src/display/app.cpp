@@ -57,6 +57,12 @@ void App::handle_events() {
                         case SDL_SCANCODE_T:
                             renderer_.set_show_thrusters(!renderer_.show_thrusters());
                             break;
+                        case SDL_SCANCODE_D:
+                            renderer_.set_show_neighbours(!renderer_.show_neighbours());
+                            break;
+                        case SDL_SCANCODE_S:
+                            renderer_.set_show_sensors(!renderer_.show_sensors());
+                            break;
                         default:
                             break;
                     }

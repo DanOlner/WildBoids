@@ -33,7 +33,12 @@ add_library(wildboids_sim
     src/simulation/rigid_body.cpp
     src/simulation/boid.cpp
     src/simulation/world.cpp
+    src/simulation/spatial_grid.cpp
+    src/simulation/sensory_system.cpp
     src/io/boid_spec.cpp
+    src/brain/direct_wire_network.cpp
+    src/brain/neat_genome.cpp
+    src/brain/neat_network.cpp
 )
 
 target_include_directories(wildboids_sim PUBLIC src)
@@ -47,6 +52,12 @@ add_executable(wildboids_tests
     tests/test_boid.cpp
     tests/test_boid_spec.cpp
     tests/test_world.cpp
+    tests/test_toroidal.cpp
+    tests/test_spatial_grid.cpp
+    tests/test_sensor.cpp
+    tests/test_direct_wire.cpp
+    tests/test_neat_genome.cpp
+    tests/test_neat_network.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)
