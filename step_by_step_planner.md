@@ -1116,6 +1116,60 @@ This is the first time we see whether the entire stack — sensors, NEAT brains,
 
 **This is the validation milestone.** If prey evolve to forage, the entire architecture works. Everything after this is enrichment.
 
+### Step 5.5b — Food sensors (strengthening the foraging gradient)
+
+**Problem:** The current sensors detect other boids (`EntityFilter::Any/Prey/Predator`) but not food. Without food sensors, the only fitness gradient is movement-based: boids that move forward sweep more world area and find food by chance. This is a weak signal — evolution can discover "move forward" but not "turn toward food". For directed foraging behaviour (the really interesting stuff), boids need to *see* food.
+
+**Goal:** Add `EntityFilter::Food` so sensor arcs can detect nearby food items using the same arc/range mechanics as boid detection. This gives the brain a direct signal about food direction and distance, enabling evolution to discover sensor→steering correlations ("food on my left → fire right thruster").
+
+**Design — extending the existing sensory system:**
+
+The sensor arc geometry (center angle, arc width, max range, `angle_in_arc()`) is entity-agnostic — it just needs a position to test. The `EntityFilter` enum already selects what to detect. Adding food is a matter of:
+
+1. **New enum value**: `EntityFilter::Food` (and optionally `EntityFilter::AnyEntity` for sensors that detect both boids and food, though `Any` currently means "any boid" so renaming may be needed for clarity).
+
+2. **Pass food to perceive()**: `SensorySystem::perceive()` currently takes `const std::vector<Boid>&` and the spatial grid. Food sensors need `const std::vector<Food>&`. Two options:
+
+   - **Option A — Widen the perceive() signature**: Add a `const std::vector<Food>& food` parameter. Food sensors iterate the food vector directly (no spatial grid needed — food doesn't move, and the list is small). Boid sensors continue using the spatial grid as before. Simple, no new data structures.
+
+   - **Option B — Add food to the spatial grid**: Insert food items into the grid alongside boids. More efficient for large food counts, but requires distinguishing food indices from boid indices (e.g. negative indices, or a separate food grid). Over-engineering for 60–100 food items.
+
+   **Recommendation: Option A.** The food vector is small (60–100 items). A brute-force distance check for food sensors is O(N_food) per sensor per boid — trivially cheap. No need for a food spatial grid until we have thousands of food items.
+
+3. **Arc intersection for food**: Same algorithm as boid detection, but iterating `food` instead of `boids`:
+   - For each food item: compute `toroidal_delta(self.position, food.position, ...)`
+   - Distance check, body-frame rotation, `angle_in_arc()` — identical to boid sensors
+   - Signal: `NearestDistance` = `1.0 - (nearest_food_dist / max_range)`, same convention
+
+4. **Update boid spec**: Add food sensors to `simple_boid.json`. A natural layout: reuse the same 7 arc positions but with `"filter": "food"`. This doubles the sensor count to 14 (7 boid + 7 food) and the brain input size to 14.
+
+   Alternatively, start with fewer food sensors — e.g. 3 wider arcs (left 120°, center 120°, right 120°) for a 10-sensor total (7 boid + 3 food). Fewer inputs = faster evolution.
+
+5. **Update genome seed**: `NeatGenome::minimal(N_sensors, 4, ...)` — the number of input nodes changes to match the new sensor count. Existing genomes with 7 inputs won't be compatible, but since we're starting evolution fresh each run, this is fine.
+
+**Changes required:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/sensor.h` | Add `Food` to `EntityFilter` enum |
+| `src/simulation/sensory_system.h` | Add `const std::vector<Food>& food` parameter to `perceive()` |
+| `src/simulation/sensory_system.cpp` | Handle `EntityFilter::Food` — iterate food vector with same arc logic |
+| `src/simulation/world.cpp` | Pass `food_` to `perceive()` in `run_sensors()` |
+| `src/io/boid_spec.cpp` | Parse `"food"` as valid filter value |
+| `data/simple_boid.json` | Add food sensor entries |
+| `tests/test_sensor.cpp` | New tests: food sensor detects nearby food, ignores boids, respects arc/range |
+| `tests/test_evolution.cpp` | Update `make_prey_spec()` to include food sensors, adjust genome input count |
+
+**Tests:**
+- Food sensor detects food item within arc and range → signal > 0
+- Food sensor ignores boids → signal = 0 when only boids nearby
+- Boid sensor ignores food → signal unchanged when food is nearby
+- Toroidal food detection across world edge
+- Full pipeline: boid with food sensor + brain, food placed ahead, verify sensor fires and brain receives signal
+- **Evolution gradient test (updated)**: With food sensors, directed foraging should emerge faster — movers-with-food-sensors should outperform movers-without-food-sensors
+
+**Impact on evolution:** This is expected to dramatically strengthen the fitness gradient. Instead of evolution only discovering "move forward = find more food by chance", it can now discover "food signal on left → steer left". This is a direct sensor→actuator correlation that weight-only evolution (no hidden nodes needed) can find quickly. The Step 5.5 evolution test should show faster fitness improvement with food sensors enabled.
+
 ### Step 5.6 — Headless runner
 
 Create a `wildboids_headless` CMake target (no SDL dependency) that runs evolution from command line:
@@ -1429,3 +1483,107 @@ The initial implementation accumulated all connection sums in a single bulk pass
 - Genome JSON format: `"genome": { "nodes": [{id, type, activation, bias}...], "connections": [{innovation, source, target, weight, enabled}...] }`. Innovation numbers are preserved through serialisation (critical for crossover alignment).
 - Four activation functions available: `Sigmoid` (output default), `Tanh`, `ReLU`, `Linear` (input default). Per-node, stored in `NodeGene`.
 - Output nodes use `Sigmoid` → outputs naturally in [0, 1] → maps directly to thruster power [0, 1].
+
+---
+
+### Phase 5 build log — Evolution (Steps 5.1–5.3)
+
+**Step 5.1: Innovation tracker + mutation operators** (95 → 117 tests)
+
+Created the innovation tracking system and five NEAT mutation operators:
+
+- **InnovationTracker** ([innovation_tracker.h](src/brain/innovation_tracker.h), [innovation_tracker.cpp](src/brain/innovation_tracker.cpp)): Per-generation cache mapping `(source_node, target_node)` → innovation number. When two genomes independently evolve the same structural mutation in the same generation, they get the same innovation number — critical for crossover alignment. Cache clears each generation via `new_generation()`.
+
+- **Mutation operators** ([mutation.h](src/brain/mutation.h), [mutation.cpp](src/brain/mutation.cpp)):
+  1. `mutate_weights` — perturb (Gaussian noise) or replace (uniform random) each connection weight
+  2. `mutate_add_connection` — pick two random nodes, add a connection if one doesn't exist (respects topology: no connections *to* input nodes or *from* output nodes)
+  3. `mutate_add_node` — split an existing connection: disable it, insert a hidden node, add source→new (weight 1.0) and new→target (original weight)
+  4. `mutate_toggle_connection` — flip enabled/disabled on a random connection
+  5. `mutate_delete_connection` — remove a connection and clean up any orphaned hidden nodes
+
+Tests: [test_innovation.cpp](tests/test_innovation.cpp) (6 tests), [test_mutation.cpp](tests/test_mutation.cpp) (16 tests).
+
+**Bug found and fixed — heap-use-after-free in `mutate_add_node` (ASan caught):**
+
+The initial implementation held a reference to a vector element (`auto& conn = genome.connections[ci]`) then called `push_back()` on the same vector. The push_back reallocated the vector's storage, invalidating the reference. Subsequent reads of `conn.source`, `conn.target`, `conn.weight` were use-after-free. Fix: copy `source`, `target`, `weight` into local variables *before* any `push_back` calls. ASan (enabled in Debug builds) caught this immediately.
+
+**Step 5.2: Crossover** (117 → 125 tests)
+
+Created NEAT innovation-aligned crossover ([crossover.h](src/brain/crossover.h), [crossover.cpp](src/brain/crossover.cpp)):
+
+- Index the other parent's connections by innovation number
+- Iterate fitter parent's connections: **matching** genes randomly from either parent, **disjoint/excess** always from the fitter parent
+- If a gene is disabled in either parent, 75% chance it stays disabled in offspring
+- Collect needed nodes from the resulting connections plus all input/output nodes
+- Build node map with fitter parent's node properties taking priority
+
+Tests: [test_crossover.cpp](tests/test_crossover.cpp) (8 tests). All passed first try.
+
+**Step 5.3: Speciation + Population management** (125 → 141 tests)
+
+Created the speciation system and full population management:
+
+- **Compatibility distance** ([speciation.h](src/brain/speciation.h), [speciation.cpp](src/brain/speciation.cpp)): δ = (c1 × E / N) + (c2 × D / N) + c3 × W̄ where E = excess genes, D = disjoint genes, W̄ = mean weight difference of matching genes, N = normalisation factor (genome size or 1 for small genomes).
+
+- **Species assignment**: Each genome is compared to species representatives. If compatible (distance < threshold), it joins that species; otherwise a new species is created. Empty species are removed.
+
+- **Population** ([population.h](src/brain/population.h), [population.cpp](src/brain/population.cpp)): Full generation cycle:
+  1. **Evaluate** — run fitness function on all genomes, track per-species best fitness and stagnation
+  2. **Advance generation** — remove stagnant species, compute adjusted fitness (fitness sharing: divide by species size), allocate offspring proportionally, apply elitism (best genome per species survives unchanged), trim to survival_rate for breeding, produce offspring via tournament selection (k=2) + crossover/mutation, re-speciate
+
+Tests: [test_speciation.cpp](tests/test_speciation.cpp) (8 tests), [test_population.cpp](tests/test_population.cpp) (8 tests including XOR benchmark). All passed first try.
+
+**XOR benchmark — validating that NEAT actually works:**
+
+The XOR problem is NEAT's classic validation test ([test_population.cpp:153–242](tests/test_population.cpp#L153-L242)). XOR is the simplest problem that **cannot** be solved by a network with no hidden nodes — it's not linearly separable. A minimal NEAT genome (direct input→output connections only) can never solve XOR, no matter what weights it has. To solve it, the evolutionary process must:
+
+1. **Discover** that a hidden node is needed (via `mutate_add_node`)
+2. **Wire** it correctly (via `mutate_add_connection`)
+3. **Tune** the weights (via `mutate_weights`)
+4. **Protect** the innovation via speciation (so structural novelty isn't immediately outcompeted)
+
+The test creates a population of 150 genomes with 3 inputs (2 + bias) → 1 output. Each generation, every genome is evaluated on the four XOR truth-table cases. Fitness = 4.0 − total_squared_error (perfect = 4.0, threshold for "solved" = 3.9). The test asserts that NEAT solves XOR within 200 generations, then verifies the winning network produces correct outputs (within 0.3 tolerance per case).
+
+This benchmark validates that mutation, crossover, speciation, fitness sharing, and selection all work together correctly. With seed 42, it typically solves XOR in ~30–60 generations and runs in about 1 second.
+
+**Phase 5 progress summary:**
+
+| Step | Description | Status | Tests |
+|------|-------------|--------|-------|
+| 5.1 | Innovation tracker + mutation | Done | 22 |
+| 5.2 | Crossover | Done | 8 |
+| 5.3 | Speciation + population | Done | 16 |
+| 5.4 | Food, energy, fitness evaluation | Done | 12 |
+| 5.5 | Evolution loop integration | Done | 4 |
+
+Total tests: 157 (up from 95 at end of Phase 4).
+
+---
+
+### Step 5.4: Food, energy, and prey fitness (141 → 153 tests)
+
+Added food spawning/eating, energy mechanics (metabolism + thrust cost), death, and fitness tracking (`total_energy_gained`).
+
+**Files modified:** `world.h/.cpp` (Food struct, WorldConfig food/energy params, spawn_food, check_food_eating, deduct_energy), `boid.h/.cpp` (alive flag, total_energy_gained, total_thrust()), `renderer.h/.cpp` (draw_food, skip dead boids), `app.cpp` (pass rng to world.step, skip dead boids in wander).
+
+**Files created:** `tests/test_food.cpp` (12 tests: eating within/outside radius, toroidal eating, food spawning, metabolism, thrust cost, death, dead boid behavior, fitness tracking).
+
+### Step 5.5: Evolution loop integration (153 → 157 tests)
+
+Built the evaluation harness connecting `Population` (genome evolution) to `World` (physics simulation). The `run_generation()` function creates a World, spawns one boid per genome (with brain built from genome), pre-seeds food, runs N ticks, and returns each boid's `total_energy_gained` as fitness.
+
+All boids run in the **same world** simultaneously — efficient and allows boid-boid sensor interactions. The `Population::evaluate()` receives cached fitness values from the world simulation.
+
+**Files created:** [tests/test_evolution.cpp](tests/test_evolution.cpp) — 4 tests:
+
+1. **Evaluation harness produces non-zero fitness** (0.8s) — Verifies the genome→boid→world→fitness pipeline works end-to-end. 10 genomes with perturbed weights, 2000 ticks. At least one boid finds food.
+
+2. **Moving boids outperform stationary ones** (1.4s) — Validates the fitness gradient exists. Hand-crafted "mover" genome (strong rear thruster weights, sigmoid(3)≈0.95) vs "sitter" genome (all weights -5, sigmoid(-5)≈0.007). Movers sweep more area and find more food. This is the foundational gradient that evolution exploits.
+
+3. **Fitness improves over generations** (22s) — The core evolution test. 20-genome population, 1200 ticks/gen, 20 generations. Verifies that NEAT weight evolution discovers genomes whose best fitness exceeds the generation-0 mean. The gradient is movement-based (sensors detect boids, not food yet), so the check is intentionally modest.
+
+4. **All evolved genomes produce valid networks** (6s) — After 10 generations of mutation + crossover in the foraging context (with structural mutations enabled), every genome builds a valid `NeatNetwork` with outputs in [0, 1].
+
+**Performance tuning:** Initial test parameters (50 pop × 3000 ticks × 30 gens) took 276 seconds. Reduced to (20 pop × 1200 ticks × 20 gens) for 22 seconds — same validation, 12× faster.
+
+**Note on fitness gradient strength:** Current sensors detect other boids (`EntityFilter::Any`), not food. The fitness gradient comes purely from movement: boids that move forward sweep more area and encounter more food by chance. This is a weak but real signal — the "movers vs sitters" test confirms it clearly. For stronger directed foraging (turning toward food), food-specific sensors would need to be added to the sensory system. This is an enhancement for a future step.

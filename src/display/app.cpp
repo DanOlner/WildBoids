@@ -25,7 +25,7 @@ void App::run() {
             accumulator += frame_time;
             while (accumulator >= dt) {
                 apply_random_wander();
-                world_.step(static_cast<float>(dt));
+                world_.step(static_cast<float>(dt), &rng_);
                 accumulator -= dt;
             }
         } else {
@@ -81,6 +81,7 @@ void App::apply_random_wander() {
     std::uniform_real_distribution<float> steer_dist(-0.4f, 0.4f);
 
     for (auto& boid : world_.get_boids_mut()) {
+        if (!boid.alive) continue;  // dead boid
         if (boid.brain) continue;  // brain-driven boid
         if (boid.thrusters.size() < 3) continue;
 

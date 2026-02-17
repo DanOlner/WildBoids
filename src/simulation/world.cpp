@@ -1,5 +1,7 @@
 #include "simulation/world.h"
+#include "simulation/toroidal.h"
 #include <cmath>
+#include <algorithm>
 
 World::World(const WorldConfig& config)
     : config_(config)
@@ -10,7 +12,11 @@ void World::add_boid(Boid boid) {
     boids_.push_back(std::move(boid));
 }
 
-void World::step(float dt) {
+void World::add_food(Food food) {
+    food_.push_back(food);
+}
+
+void World::step(float dt, std::mt19937* rng) {
     for (auto& boid : boids_) {
         boid.step(dt, config_.linear_drag, config_.angular_drag);
         if (config_.toroidal) {
@@ -21,11 +27,18 @@ void World::step(float dt) {
     rebuild_grid();
     run_sensors();
     run_brains();
+    deduct_energy(dt);
+    check_food_eating();
+
+    if (rng) {
+        spawn_food(dt, *rng);
+    }
 }
 
 void World::run_sensors() {
     for (int i = 0; i < static_cast<int>(boids_.size()); ++i) {
         auto& boid = boids_[i];
+        if (!boid.alive) continue;
         if (!boid.sensors) continue;
         boid.sensor_outputs.resize(boid.sensors->input_count());
         boid.sensors->perceive(boids_, grid_, config_, i,
@@ -59,6 +72,7 @@ void World::wrap_position(Vec2& pos) const {
 
 void World::run_brains() {
     for (auto& boid : boids_) {
+        if (!boid.alive) continue;
         if (!boid.brain) continue;
 
         int n_in = static_cast<int>(boid.sensor_outputs.size());
@@ -79,6 +93,81 @@ void World::run_brains() {
 void World::rebuild_grid() {
     grid_.clear();
     for (int i = 0; i < static_cast<int>(boids_.size()); ++i) {
-        grid_.insert(i, boids_[i].body.position);
+        if (boids_[i].alive) {
+            grid_.insert(i, boids_[i].body.position);
+        }
+    }
+}
+
+const std::vector<Food>& World::get_food() const {
+    return food_;
+}
+
+void World::spawn_food(float dt, std::mt19937& rng) {
+    if (static_cast<int>(food_.size()) >= config_.food_max) return;
+
+    // Probabilistic spawning: expected spawns = rate * dt
+    float expected = config_.food_spawn_rate * dt;
+    // For small dt, use Bernoulli trial; for large expected, spawn multiple
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    int to_spawn = static_cast<int>(expected);
+    float fractional = expected - static_cast<float>(to_spawn);
+    if (dist(rng) < fractional) ++to_spawn;
+
+    std::uniform_real_distribution<float> x_dist(0.0f, config_.width);
+    std::uniform_real_distribution<float> y_dist(0.0f, config_.height);
+
+    for (int i = 0; i < to_spawn; ++i) {
+        if (static_cast<int>(food_.size()) >= config_.food_max) break;
+        food_.push_back(Food{Vec2{x_dist(rng), y_dist(rng)}, config_.food_energy});
+    }
+}
+
+void World::check_food_eating() {
+    float eat_radius_sq = config_.food_eat_radius * config_.food_eat_radius;
+
+    for (auto& boid : boids_) {
+        if (!boid.alive) continue;
+
+        food_.erase(
+            std::remove_if(food_.begin(), food_.end(),
+                [&](const Food& f) {
+                    float dist_sq;
+                    if (config_.toroidal) {
+                        dist_sq = toroidal_distance_sq(
+                            boid.body.position, f.position,
+                            config_.width, config_.height);
+                    } else {
+                        Vec2 d = f.position - boid.body.position;
+                        dist_sq = d.length_squared();
+                    }
+                    if (dist_sq <= eat_radius_sq) {
+                        boid.energy += f.energy_value;
+                        boid.total_energy_gained += f.energy_value;
+                        return true;  // remove this food
+                    }
+                    return false;
+                }),
+            food_.end());
+    }
+}
+
+void World::deduct_energy(float dt) {
+    for (auto& boid : boids_) {
+        if (!boid.alive) continue;
+
+        // Metabolism cost
+        boid.energy -= config_.metabolism_rate * dt;
+
+        // Thrust cost
+        boid.energy -= config_.thrust_cost * boid.total_thrust() * dt;
+
+        // Death
+        if (boid.energy <= 0.0f) {
+            boid.energy = 0.0f;
+            boid.alive = false;
+            // Zero all thrusters
+            for (auto& t : boid.thrusters) t.power = 0.0f;
+        }
     }
 }

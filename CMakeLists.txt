@@ -39,6 +39,11 @@ add_library(wildboids_sim
     src/brain/direct_wire_network.cpp
     src/brain/neat_genome.cpp
     src/brain/neat_network.cpp
+    src/brain/innovation_tracker.cpp
+    src/brain/mutation.cpp
+    src/brain/crossover.cpp
+    src/brain/speciation.cpp
+    src/brain/population.cpp
 )
 
 target_include_directories(wildboids_sim PUBLIC src)
@@ -59,6 +64,13 @@ add_executable(wildboids_tests
     tests/test_neat_genome.cpp
     tests/test_neat_network.cpp
     tests/test_boid_brain.cpp
+    tests/test_innovation.cpp
+    tests/test_mutation.cpp
+    tests/test_crossover.cpp
+    tests/test_speciation.cpp
+    tests/test_population.cpp
+    tests/test_food.cpp
+    tests/test_evolution.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)

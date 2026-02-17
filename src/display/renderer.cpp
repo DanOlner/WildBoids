@@ -57,7 +57,10 @@ void Renderer::draw(const World& world) {
 
     const auto& config = world.get_config();
 
+    draw_food(world.get_food(), config);
+
     for (const auto& boid : world.get_boids()) {
+        if (!boid.alive) continue;
         if (show_sensors_) {
             draw_sensor_arcs(boid, config);
         }
@@ -163,6 +166,18 @@ void Renderer::draw_neighbour_lines(const World& world) {
                 world_to_screen_x(end.x, config),
                 world_to_screen_y(end.y, config));
         }
+    }
+}
+
+void Renderer::draw_food(const std::vector<Food>& food, const WorldConfig& config) {
+    // Draw each food item as a small filled rectangle (dot)
+    SDL_SetRenderDrawColor(renderer_, 220, 200, 50, 255); // yellow-gold
+
+    for (const auto& f : food) {
+        float sx = world_to_screen_x(f.position.x, config);
+        float sy = world_to_screen_y(f.position.y, config);
+        SDL_FRect rect = {sx - 2.0f, sy - 2.0f, 4.0f, 4.0f};
+        SDL_RenderFillRect(renderer_, &rect);
     }
 }
 

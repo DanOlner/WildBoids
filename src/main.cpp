@@ -14,6 +14,14 @@ int main() {
     config.linear_drag = 0.02f;
     config.angular_drag = 0.05f;
 
+    // Food and energy
+    config.food_spawn_rate = 3.0f;
+    config.food_max = 60;
+    config.food_eat_radius = 10.0f;
+    config.food_energy = 20.0f;
+    config.metabolism_rate = 0.3f;
+    config.thrust_cost = 0.02f;
+
     World world(config);
 
     // Load boid spec
