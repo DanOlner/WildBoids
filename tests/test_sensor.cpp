@@ -87,7 +87,7 @@ TEST_CASE("Single boid directly ahead detected", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     // Expected: 1 - (50/100) = 0.5
     CHECK_THAT(output, WithinAbs(0.5f, 0.02f));
@@ -103,7 +103,7 @@ TEST_CASE("Boid outside arc not detected", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
 }
@@ -117,7 +117,7 @@ TEST_CASE("Boid outside range not detected", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
 }
@@ -132,7 +132,7 @@ TEST_CASE("Self not detected", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
 }
@@ -146,7 +146,7 @@ TEST_CASE("Toroidal wrap: boid across world edge detected", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     // Distance across wrap: 800 - 790 + 10 = 20 units
     // Expected: 1 - (20/100) = 0.8
@@ -163,7 +163,7 @@ TEST_CASE("EntityFilter: prey sensor ignores predators", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     CHECK_THAT(output, WithinAbs(0.0f, 1e-6f)); // predator filtered out
 }
@@ -180,7 +180,7 @@ TEST_CASE("Rotated boid: sensor arc moves with heading", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     // Should detect: 1 - (50/100) = 0.5
     CHECK_THAT(output, WithinAbs(0.5f, 0.02f));
@@ -198,7 +198,7 @@ TEST_CASE("SectorDensity signal type", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float output = 0;
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, &output);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
 
     // 3 neighbours / expected_max(10) = 0.3
     CHECK_THAT(output, WithinAbs(0.3f, 0.02f));
@@ -215,7 +215,7 @@ TEST_CASE("Multiple sensors produce independent outputs", "[sensor]") {
     World world = make_world(std::move(boids));
 
     float outputs[2] = {0, 0};
-    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, outputs);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
 
     CHECK(outputs[0] > 0.0f);  // forward sensor detects
     CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));  // right sensor does not
@@ -242,5 +242,124 @@ TEST_CASE("World runs sensors each tick", "[sensor]") {
     world.step(0);
 
     // Sensor should have detected the nearby boid
+    CHECK(world.get_boids()[0].sensor_outputs[0] > 0.0f);
+}
+
+// ---- Food sensor tests ----
+
+TEST_CASE("Food sensor detects food within arc and range", "[sensor][food]") {
+    SensorSpec spec{0, 0, 36 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    // Boid at (400,400) facing up, food at (400,450) — 50 units ahead
+    auto boids = make_boids(make_boid({400, 400}));
+    World world = make_world(std::move(boids));
+    world.add_food(Food{{400, 450}, 10.0f});
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    // Expected: 1 - (50/100) = 0.5
+    CHECK_THAT(output, WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Food sensor ignores boids", "[sensor][food]") {
+    SensorSpec spec{0, 0, 360 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    // Only boids nearby, no food
+    auto boids = make_boids(make_boid({400, 400}), make_boid({410, 400}));
+    World world = make_world(std::move(boids));
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Boid sensor ignores food", "[sensor][food]") {
+    SensorSpec spec{0, 0, 360 * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    // Only food nearby, no other boids
+    auto boids = make_boids(make_boid({400, 400}));
+    World world = make_world(std::move(boids));
+    world.add_food(Food{{410, 400}, 10.0f});
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Food sensor: food outside arc not detected", "[sensor][food]") {
+    // Narrow forward arc
+    SensorSpec spec{0, 0, 36 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    auto boids = make_boids(make_boid({400, 400}));
+    World world = make_world(std::move(boids));
+    // Food directly to the right — outside 18° half-arc
+    world.add_food(Food{{450, 400}, 10.0f});
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Food sensor: food outside range not detected", "[sensor][food]") {
+    SensorSpec spec{0, 0, 36 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    auto boids = make_boids(make_boid({400, 400}));
+    World world = make_world(std::move(boids));
+    // Food 150 units ahead — beyond 100 range
+    world.add_food(Food{{400, 550}, 10.0f});
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Food sensor: toroidal food detection across world edge", "[sensor][food]") {
+    SensorSpec spec{0, 0, 36 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    // Boid near top edge facing up, food near bottom edge (wraps to ~20 units ahead)
+    auto boids = make_boids(make_boid({400, 790}));
+    World world = make_world(std::move(boids));
+    world.add_food(Food{{400, 10}, 10.0f});
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    // Distance across wrap: 800 - 790 + 10 = 20 units
+    // Expected: 1 - (20/100) = 0.8
+    CHECK_THAT(output, WithinAbs(0.8f, 0.02f));
+}
+
+TEST_CASE("World runs food sensors via step()", "[sensor][food]") {
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    World world(config);
+
+    // Create boid with a food sensor
+    SensorSpec food_sensor{0, 0, 360 * DEG, 100.0f, EntityFilter::Food, SignalType::NearestDistance};
+    Boid b0 = make_boid({400, 400});
+    b0.sensors.emplace(std::vector<SensorSpec>{food_sensor});
+    b0.sensor_outputs.resize(1, 0.0f);
+    world.add_boid(std::move(b0));
+
+    // Add food nearby
+    world.add_food(Food{{420, 400}, 10.0f});
+
+    world.step(0);
+
+    // Food sensor should have detected the food
     CHECK(world.get_boids()[0].sensor_outputs[0] > 0.0f);
 }

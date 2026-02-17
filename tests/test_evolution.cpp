@@ -14,7 +14,7 @@ using Catch::Matchers::WithinAbs;
 
 // --- Helpers ---
 
-// Build a BoidSpec programmatically (matching simple_boid.json layout: 7 sensors, 4 thrusters)
+// Build a BoidSpec programmatically (matching simple_boid.json layout: 10 sensors, 4 thrusters)
 static BoidSpec make_prey_spec() {
     BoidSpec spec;
     spec.version = "0.2";
@@ -29,7 +29,7 @@ static BoidSpec make_prey_spec() {
     spec.thrusters.push_back({2, "right_rear", {0.3f, -0.4f}, {-1.0f, 0.0f}, 20.0f});
     spec.thrusters.push_back({3, "front",      {0.0f, 0.5f},  {0.0f, -1.0f}, 15.0f});
 
-    // 7 sensors: 5 forward arcs + 2 rear arcs
+    // 7 boid sensors: 5 forward arcs + 2 rear arcs
     constexpr float DEG = static_cast<float>(M_PI) / 180.0f;
     spec.sensors.push_back({0,   0.0f * DEG, 36.0f * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance});
     spec.sensors.push_back({1, -36.0f * DEG, 36.0f * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance});
@@ -38,6 +38,11 @@ static BoidSpec make_prey_spec() {
     spec.sensors.push_back({4,  72.0f * DEG, 36.0f * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance});
     spec.sensors.push_back({5, -135.0f * DEG, 90.0f * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance});
     spec.sensors.push_back({6,  135.0f * DEG, 90.0f * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance});
+
+    // 3 food sensors: wide 120° arcs covering full 360°
+    spec.sensors.push_back({7,    0.0f * DEG, 120.0f * DEG, 120.0f, EntityFilter::Food, SignalType::NearestDistance});
+    spec.sensors.push_back({8, -120.0f * DEG, 120.0f * DEG, 120.0f, EntityFilter::Food, SignalType::NearestDistance});
+    spec.sensors.push_back({9,  120.0f * DEG, 120.0f * DEG, 120.0f, EntityFilter::Food, SignalType::NearestDistance});
 
     return spec;
 }
@@ -118,7 +123,7 @@ TEST_CASE("Evolution: evaluation harness produces non-zero fitness", "[evolution
     WorldConfig config = make_evolution_config();
 
     int next_innov = 1;
-    NeatGenome seed = NeatGenome::minimal(7, 4, next_innov);  // 7 sensors → 4 thrusters
+    NeatGenome seed = NeatGenome::minimal(10, 4, next_innov);  // 10 sensors → 4 thrusters
 
     // Create a small set of genomes with perturbed weights
     std::mt19937 rng(42);
@@ -156,9 +161,9 @@ TEST_CASE("Evolution: moving boids outperform stationary ones", "[evolution]") {
     int next_innov = 1;
 
     // "Mover" genome: strong positive weight from any input to rear thruster (output 0)
-    NeatGenome mover = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome mover = NeatGenome::minimal(10, 4, next_innov);
     for (auto& c : mover.connections) {
-        if (c.target == 7) {  // output node 0 = rear thruster (node ids: inputs 0-6, outputs 7-10)
+        if (c.target == 10) {  // output node 0 = rear thruster (node ids: inputs 0-9, outputs 10-13)
             c.weight = 3.0f;  // sigmoid(3) ≈ 0.95 → strong forward thrust
         } else {
             c.weight = 0.0f;  // sigmoid(0) = 0.5 → moderate other thrusters
@@ -166,7 +171,7 @@ TEST_CASE("Evolution: moving boids outperform stationary ones", "[evolution]") {
     }
 
     // "Sitter" genome: all weights strongly negative → all thrusters near 0
-    NeatGenome sitter = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome sitter = NeatGenome::minimal(10, 4, next_innov);
     for (auto& c : sitter.connections) {
         c.weight = -5.0f;  // sigmoid(-5) ≈ 0.007 → nearly zero thrust
     }
@@ -200,7 +205,7 @@ TEST_CASE("Evolution: fitness improves over generations", "[evolution]") {
     WorldConfig config = make_evolution_config();
 
     int next_innov = 1;
-    NeatGenome seed = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome seed = NeatGenome::minimal(10, 4, next_innov);
 
     PopulationParams params;
     params.population_size = 20;
@@ -262,7 +267,7 @@ TEST_CASE("Evolution: all evolved genomes produce valid networks", "[evolution]"
     WorldConfig config = make_evolution_config();
 
     int next_innov = 1;
-    NeatGenome seed = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome seed = NeatGenome::minimal(10, 4, next_innov);
 
     PopulationParams params;
     params.population_size = 20;
@@ -288,9 +293,9 @@ TEST_CASE("Evolution: all evolved genomes produce valid networks", "[evolution]"
     // Every genome should build a valid network with correct I/O dimensions
     for (int i = 0; i < pop.size(); ++i) {
         NeatNetwork net(pop.genome(i));
-        float inputs[7] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+        float inputs[10] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
         float outputs[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        net.activate(inputs, 7, outputs, 4);
+        net.activate(inputs, 10, outputs, 4);
         for (int j = 0; j < 4; ++j) {
             CHECK(std::isfinite(outputs[j]));
             CHECK(outputs[j] >= 0.0f);  // sigmoid outputs are non-negative

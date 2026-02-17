@@ -13,6 +13,7 @@ static constexpr float RAD_TO_DEG = 180.0f / static_cast<float>(M_PI);
 static EntityFilter parse_entity_filter(const std::string& s) {
     if (s == "prey") return EntityFilter::Prey;
     if (s == "predator") return EntityFilter::Predator;
+    if (s == "food") return EntityFilter::Food;
     return EntityFilter::Any;
 }
 
@@ -21,6 +22,7 @@ static std::string entity_filter_to_string(EntityFilter f) {
         case EntityFilter::Prey:     return "prey";
         case EntityFilter::Predator: return "predator";
         case EntityFilter::Any:      return "any";
+        case EntityFilter::Food:     return "food";
     }
     return "any";
 }

@@ -42,20 +42,18 @@ int main() {
     std::uniform_real_distribution<float> angle_dist(0, 2.0f * 3.14159265f);
     std::normal_distribution<float> weight_dist(0.0f, 1.0f);
 
+    int n_sensors = static_cast<int>(spec.sensors.size());
+    int n_thrusters = static_cast<int>(spec.thrusters.size());
+
     int next_innov = 1;
     for (int i = 0; i < 30; i++) {
-        // Give half the boids a brain with random weights
-        if (i < 15) {
-            NeatGenome genome = NeatGenome::minimal(7, 4, next_innov);
-            // Reset innovation counter so all brains share the same topology
-            next_innov = 1;
-            for (auto& c : genome.connections) {
-                c.weight = weight_dist(rng);
-            }
-            spec.genome = genome;
-        } else {
-            spec.genome.reset();
+        NeatGenome genome = NeatGenome::minimal(n_sensors, n_thrusters, next_innov);
+        // Reset innovation counter so all brains share the same topology
+        next_innov = 1;
+        for (auto& c : genome.connections) {
+            c.weight = weight_dist(rng);
         }
+        spec.genome = genome;
 
         Boid boid = create_boid_from_spec(spec);
         boid.body.position = {pos_x(rng), pos_y(rng)};

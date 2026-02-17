@@ -41,7 +41,7 @@ void World::run_sensors() {
         if (!boid.alive) continue;
         if (!boid.sensors) continue;
         boid.sensor_outputs.resize(boid.sensors->input_count());
-        boid.sensors->perceive(boids_, grid_, config_, i,
+        boid.sensors->perceive(boids_, grid_, config_, i, food_,
                                boid.sensor_outputs.data());
     }
 }

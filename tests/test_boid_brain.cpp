@@ -22,16 +22,16 @@ static std::string data_path(const std::string& filename) {
 TEST_CASE("Brain-driven boid: minimal genome gives sigmoid(0) thruster power", "[boid_brain]") {
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
 
-    // Attach a minimal genome (7 sensors → 4 thrusters) with all-zero weights
+    // Attach a minimal genome (10 sensors → 4 thrusters) with all-zero weights
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(7, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 4, next_innov);
 
     Boid boid = create_boid_from_spec(spec);
     REQUIRE(boid.brain != nullptr);
 
     // Run the brain manually with zero sensor outputs
     std::vector<float> commands(4);
-    boid.brain->activate(boid.sensor_outputs.data(), 7, commands.data(), 4);
+    boid.brain->activate(boid.sensor_outputs.data(), 10, commands.data(), 4);
 
     // All-zero weights + zero inputs → sigmoid(0) = 0.5 for all outputs
     for (int i = 0; i < 4; ++i) {
@@ -50,7 +50,7 @@ TEST_CASE("Brain-driven boid: world step activates brain", "[boid_brain]") {
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(7, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 4, next_innov);
 
     Boid boid = create_boid_from_spec(spec);
     boid.body.position = {400, 400};
@@ -107,11 +107,11 @@ TEST_CASE("Brain responds to sensor input: boid ahead drives thruster output", "
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
 
     // Set a large weight from sensor 0 (forward) to thruster 0 (rear)
-    // Sensor 0 → output node 7 (first output, maps to thruster 0)
-    // Connection from input 0 to output 7 is connections[0] in minimal topology
+    // Sensor 0 → output node 10 (first output, maps to thruster 0)
+    // Connection from input 0 to output 10 is connections[0] in minimal topology
     genome.connections[0].weight = 5.0f;
     spec.genome = genome;
 
@@ -151,13 +151,13 @@ TEST_CASE("Full pipeline: brain-driven boid accelerates forward", "[boid_brain]"
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(7, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
 
-    // Zero all weights, then give output node 7 (rear thruster) a large positive bias
+    // Zero all weights, then give output node 10 (rear thruster) a large positive bias
     // This makes the rear thruster fire regardless of sensor input
-    genome.nodes[7].bias = 5.0f;
-    // Give front thruster (output node 10) a large negative bias → power near 0
-    genome.nodes[10].bias = -5.0f;
+    genome.nodes[10].bias = 5.0f;
+    // Give front thruster (output node 13) a large negative bias → power near 0
+    genome.nodes[13].bias = -5.0f;
     spec.genome = genome;
 
     Boid boid = create_boid_from_spec(spec);
@@ -191,7 +191,7 @@ TEST_CASE("Brain-driven boid: spec with genome creates brain automatically", "[b
 
     // With genome → brain created
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(7, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 4, next_innov);
     Boid boid_with_brain = create_boid_from_spec(spec);
     CHECK(boid_with_brain.brain != nullptr);
 }

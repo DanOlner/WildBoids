@@ -5,6 +5,7 @@
 #include <vector>
 
 struct Boid;
+struct Food;
 struct WorldConfig;
 class SpatialGrid;
 
@@ -20,6 +21,7 @@ public:
                   const SpatialGrid& grid,
                   const WorldConfig& config,
                   int self_index,
+                  const std::vector<Food>& food,
                   float* outputs) const;
 
 private:
@@ -29,5 +31,6 @@ private:
                           const Boid& self,
                           const std::vector<Boid>& boids,
                           const SpatialGrid& grid,
-                          const WorldConfig& config) const;
+                          const WorldConfig& config,
+                          const std::vector<Food>& food) const;
 };

@@ -1587,3 +1587,46 @@ All boids run in the **same world** simultaneously — efficient and allows boid
 **Performance tuning:** Initial test parameters (50 pop × 3000 ticks × 30 gens) took 276 seconds. Reduced to (20 pop × 1200 ticks × 20 gens) for 22 seconds — same validation, 12× faster.
 
 **Note on fitness gradient strength:** Current sensors detect other boids (`EntityFilter::Any`), not food. The fitness gradient comes purely from movement: boids that move forward sweep more area and encounter more food by chance. This is a weak but real signal — the "movers vs sitters" test confirms it clearly. For stronger directed foraging (turning toward food), food-specific sensors would need to be added to the sensory system. This is an enhancement for a future step.
+
+### Step 5.5b: Food sensors (157 → 164 tests)
+
+Added `EntityFilter::Food` so sensor arcs can detect nearby food items using the same arc/range mechanics as boid detection. This gives the brain a direct signal about food direction and distance, enabling evolution to discover sensor→steering correlations ("food on my left → fire right thruster").
+
+**Implementation: Option A (brute-force food iteration).** For food sensors, iterate the entire food vector directly rather than using the spatial grid. The food list is small (60–100 items), making brute-force O(N_food) per sensor per boid trivially cheap. Same arc geometry (distance check, body-frame rotation, `angle_in_arc()`) reused for both food and boid detection.
+
+**Sensor count change:** 7 → 10 sensors (7 boid + 3 food). Genome input count correspondingly 7 → 10. Output node IDs shift from 7–10 to 10–13. All test files updated to match.
+
+**Food sensor layout in `simple_boid.json`:** 3 wide 120° arcs at 0°, −120°, +120° with 120 world unit range, covering full 360°. Fewer inputs than duplicating all 7 boid arcs — faster evolution.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/sensor.h` | Added `Food` to `EntityFilter` enum |
+| `src/simulation/sensory_system.h` | Added `const std::vector<Food>& food` parameter to `perceive()` and `evaluate_sensor()` |
+| `src/simulation/sensory_system.cpp` | Refactored: extracted `check_arc()` and `compute_signal()` helpers. Food sensors brute-force iterate food vector; boid sensors use spatial grid. `passes_filter()` returns false for `EntityFilter::Food` |
+| `src/simulation/world.cpp` | Pass `food_` to `perceive()` in `run_sensors()` |
+| `src/io/boid_spec.cpp` | Added `"food"` parsing/serialization for `EntityFilter` |
+| `data/simple_boid.json` | Added 3 food sensors (ids 7–9), version stays 0.2 |
+| `src/main.cpp` | Derive genome input count from `spec.sensors.size()` instead of hardcoding 7 |
+| `tests/test_sensor.cpp` | Updated all 9 existing `perceive()` calls to include food parameter; added 7 new food sensor tests |
+| `tests/test_evolution.cpp` | Updated `make_prey_spec()` with 3 food sensors; all genome sizes 7→10; output node IDs shifted |
+| `tests/test_boid_spec.cpp` | Sensor count checks 7→10; genome sizes 7→10; node indices shifted |
+| `tests/test_boid_brain.cpp` | All genome sizes 7→10; output node IDs shifted |
+
+**New tests (7):** Food detection within arc/range, food sensor ignores boids, boid sensor ignores food, food outside arc, food outside range, toroidal food detection across world edge, world step with food sensors.
+
+**Build and test results:** Clean build (18/18 targets). 160 non-evolution tests in 4.66s, 4 evolution tests in 43.69s. All 164 tests passing.
+
+**Phase 5 progress summary (updated):**
+
+| Step | Description | Status | Tests |
+|------|-------------|--------|-------|
+| 5.1 | Innovation tracker + mutation | Done | 22 |
+| 5.2 | Crossover | Done | 8 |
+| 5.3 | Speciation + population | Done | 16 |
+| 5.4 | Food, energy, fitness evaluation | Done | 12 |
+| 5.5 | Evolution loop integration | Done | 4 |
+| 5.5b | Food sensors | Done | 7 |
+
+Total tests: 164 (up from 157 at end of Step 5.5).
