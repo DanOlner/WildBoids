@@ -4,7 +4,7 @@
         "height": 800,
         "toroidal": true,
         "linearDrag": 0.02,
-        "angularDrag": 0.05,
+        "angularDrag": 0.75,
         "gridCellSize": 100
     },
     "food": {
