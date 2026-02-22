@@ -15,6 +15,7 @@ private:
     std::mt19937& rng_;
     bool running_ = true;
     bool paused_ = false;
+    int speed_multiplier_ = 1;
 
     void handle_events();
     void apply_random_wander();

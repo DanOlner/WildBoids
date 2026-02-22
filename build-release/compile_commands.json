@@ -31,6 +31,12 @@
 },
 {
   "directory": "/Users/danolner/Code/claude/wildboids/build-release",
+  "command": "/usr/bin/c++ -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -o CMakeFiles/wildboids_sim.dir/src/simulation/food_source.cpp.o -c /Users/danolner/Code/claude/wildboids/src/simulation/food_source.cpp",
+  "file": "/Users/danolner/Code/claude/wildboids/src/simulation/food_source.cpp",
+  "output": "/Users/danolner/Code/claude/wildboids/build-release/CMakeFiles/wildboids_sim.dir/src/simulation/food_source.cpp.o"
+},
+{
+  "directory": "/Users/danolner/Code/claude/wildboids/build-release",
   "command": "/usr/bin/c++ -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -o CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o -c /Users/danolner/Code/claude/wildboids/src/io/boid_spec.cpp",
   "file": "/Users/danolner/Code/claude/wildboids/src/io/boid_spec.cpp",
   "output": "/Users/danolner/Code/claude/wildboids/build-release/CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o"
@@ -220,6 +226,12 @@
   "command": "/usr/bin/c++ -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-src/src/catch2/.. -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-build/generated-includes -O3 -DNDEBUG -std=gnu++20 -arch arm64 -o CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o -c /Users/danolner/Code/claude/wildboids/tests/test_sim_config.cpp",
   "file": "/Users/danolner/Code/claude/wildboids/tests/test_sim_config.cpp",
   "output": "/Users/danolner/Code/claude/wildboids/build-release/CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o"
+},
+{
+  "directory": "/Users/danolner/Code/claude/wildboids/build-release",
+  "command": "/usr/bin/c++ -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-src/src/catch2/.. -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-build/generated-includes -O3 -DNDEBUG -std=gnu++20 -arch arm64 -o CMakeFiles/wildboids_tests.dir/tests/test_food_source.cpp.o -c /Users/danolner/Code/claude/wildboids/tests/test_food_source.cpp",
+  "file": "/Users/danolner/Code/claude/wildboids/tests/test_food_source.cpp",
+  "output": "/Users/danolner/Code/claude/wildboids/build-release/CMakeFiles/wildboids_tests.dir/tests/test_food_source.cpp.o"
 },
 {
   "directory": "/Users/danolner/Code/claude/wildboids/build-release",

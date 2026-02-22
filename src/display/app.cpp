@@ -1,6 +1,7 @@
 #include "display/app.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <iostream>
 
 App::App(World& world, Renderer& renderer, std::mt19937& rng)
     : world_(world), renderer_(renderer), rng_(rng) {}
@@ -22,7 +23,7 @@ void App::run() {
         handle_events();
 
         if (!paused_) {
-            accumulator += frame_time;
+            accumulator += frame_time * speed_multiplier_;
             while (accumulator >= dt) {
                 apply_random_wander();
                 world_.step(static_cast<float>(dt), &rng_);
@@ -62,6 +63,13 @@ void App::handle_events() {
                             break;
                         case SDL_SCANCODE_S:
                             renderer_.set_show_sensors(!renderer_.show_sensors());
+                            break;
+                        case SDL_SCANCODE_F:
+                            if (speed_multiplier_ == 1) speed_multiplier_ = 2;
+                            else if (speed_multiplier_ == 2) speed_multiplier_ = 4;
+                            else if (speed_multiplier_ == 4) speed_multiplier_ = 8;
+                            else speed_multiplier_ = 1;
+                            std::cerr << "Speed: " << speed_multiplier_ << "x\n";
                             break;
                         default:
                             break;

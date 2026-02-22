@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simulation/boid.h"
+#include "simulation/food_source.h"
 #include "simulation/spatial_grid.h"
 #include <vector>
 #include <random>
@@ -18,11 +19,15 @@ struct WorldConfig {
     float angular_drag = 0.1f;
     float grid_cell_size = 100.0f;
 
-    // Food
+    // Food (flat fields kept for backward compat with tests)
     float food_spawn_rate = 2.0f;      // new food per second
     int food_max = 100;                 // cap on food count
     float food_eat_radius = 8.0f;      // how close to eat
     float food_energy = 10.0f;         // energy per food item
+
+    // Food source config — if set, overrides flat fields above.
+    // If left as default UniformFoodConfig, constructor syncs from flat fields.
+    FoodSourceConfig food_source_config = UniformFoodConfig{};
 
     // Energy costs
     float metabolism_rate = 0.5f;      // energy lost per second just being alive
@@ -37,6 +42,9 @@ public:
     void add_food(Food food);
     void step(float dt, std::mt19937* rng = nullptr);
 
+    // Pre-seed food using the configured food source strategy.
+    void pre_seed_food(std::mt19937& rng);
+
     const std::vector<Boid>& get_boids() const;
     std::vector<Boid>& get_boids_mut();
     const WorldConfig& get_config() const;
@@ -48,6 +56,7 @@ private:
     std::vector<Boid> boids_;
     std::vector<Food> food_;
     SpatialGrid grid_;
+    FoodSource food_source_;
 
     void wrap_position(Vec2& pos) const;
     void rebuild_grid();

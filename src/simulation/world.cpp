@@ -6,7 +6,17 @@
 World::World(const WorldConfig& config)
     : config_(config)
     , grid_(config.width, config.height, config.grid_cell_size, config.toroidal)
-{}
+    , food_source_(UniformFoodSource(UniformFoodConfig{}, 0, 0))  // placeholder
+{
+    // If food_source_config is the default UniformFoodConfig, sync from flat fields.
+    // This preserves backward compat for tests that set config.food_spawn_rate etc.
+    if (auto* uc = std::get_if<UniformFoodConfig>(&config_.food_source_config)) {
+        uc->spawn_rate = config_.food_spawn_rate;
+        uc->max_food = config_.food_max;
+        uc->energy = config_.food_energy;
+    }
+    food_source_ = make_food_source(config_.food_source_config, config_.width, config_.height);
+}
 
 void World::add_boid(Boid boid) {
     boids_.push_back(std::move(boid));
@@ -33,6 +43,12 @@ void World::step(float dt, std::mt19937* rng) {
     if (rng) {
         spawn_food(dt, *rng);
     }
+}
+
+void World::pre_seed_food(std::mt19937& rng) {
+    std::visit([&](auto& source) {
+        source.pre_seed(food_, rng);
+    }, food_source_);
 }
 
 void World::run_sensors() {
@@ -104,23 +120,9 @@ const std::vector<Food>& World::get_food() const {
 }
 
 void World::spawn_food(float dt, std::mt19937& rng) {
-    if (static_cast<int>(food_.size()) >= config_.food_max) return;
-
-    // Probabilistic spawning: expected spawns = rate * dt
-    float expected = config_.food_spawn_rate * dt;
-    // For small dt, use Bernoulli trial; for large expected, spawn multiple
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-    int to_spawn = static_cast<int>(expected);
-    float fractional = expected - static_cast<float>(to_spawn);
-    if (dist(rng) < fractional) ++to_spawn;
-
-    std::uniform_real_distribution<float> x_dist(0.0f, config_.width);
-    std::uniform_real_distribution<float> y_dist(0.0f, config_.height);
-
-    for (int i = 0; i < to_spawn; ++i) {
-        if (static_cast<int>(food_.size()) >= config_.food_max) break;
-        food_.push_back(Food{Vec2{x_dist(rng), y_dist(rng)}, config_.food_energy});
-    }
+    std::visit([&](auto& source) {
+        source.spawn(food_, dt, rng);
+    }, food_source_);
 }
 
 void World::check_food_eating() {

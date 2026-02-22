@@ -25,10 +25,8 @@ static std::vector<float> run_generation(
     std::uniform_real_distribution<float> y_dist(0.0f, config.height);
     std::uniform_real_distribution<float> angle_dist(0.0f, 2.0f * static_cast<float>(M_PI));
 
-    // Pre-seed some food
-    for (int i = 0; i < config.food_max / 2; ++i) {
-        world.add_food(Food{Vec2{x_dist(rng), y_dist(rng)}, config.food_energy});
-    }
+    // Pre-seed food using the configured food source strategy
+    world.pre_seed_food(rng);
 
     // Spawn one boid per genome
     for (const auto& genome : genomes) {

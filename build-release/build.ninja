@@ -94,6 +94,15 @@ build CMakeFiles/wildboids_sim.dir/src/simulation/sensory_system.cpp.o: CXX_COMP
   OBJECT_FILE_DIR = CMakeFiles/wildboids_sim.dir/src/simulation
   TARGET_SUPPORT_DIR = CMakeFiles/wildboids_sim.dir
 
+build CMakeFiles/wildboids_sim.dir/src/simulation/food_source.cpp.o: CXX_COMPILER__wildboids_sim_unscanned_Release /Users/danolner/Code/claude/wildboids/src/simulation/food_source.cpp || cmake_object_order_depends_target_wildboids_sim
+  CONFIG = Release
+  DEP_FILE = CMakeFiles/wildboids_sim.dir/src/simulation/food_source.cpp.o.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++20 -arch arm64
+  INCLUDES = -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include
+  OBJECT_DIR = CMakeFiles/wildboids_sim.dir
+  OBJECT_FILE_DIR = CMakeFiles/wildboids_sim.dir/src/simulation
+  TARGET_SUPPORT_DIR = CMakeFiles/wildboids_sim.dir
+
 build CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o: CXX_COMPILER__wildboids_sim_unscanned_Release /Users/danolner/Code/claude/wildboids/src/io/boid_spec.cpp || cmake_object_order_depends_target_wildboids_sim
   CONFIG = Release
   DEP_FILE = CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o.d
@@ -192,7 +201,7 @@ build CMakeFiles/wildboids_sim.dir/src/brain/population.cpp.o: CXX_COMPILER__wil
 #############################################
 # Link the static library libwildboids_sim.a
 
-build libwildboids_sim.a: CXX_STATIC_LIBRARY_LINKER__wildboids_sim_Release CMakeFiles/wildboids_sim.dir/src/simulation/rigid_body.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/boid.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/world.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/spatial_grid.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/sensory_system.cpp.o CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o CMakeFiles/wildboids_sim.dir/src/io/sim_config.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/direct_wire_network.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/neat_genome.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/neat_network.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/innovation_tracker.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/mutation.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/crossover.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/speciation.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/population.cpp.o
+build libwildboids_sim.a: CXX_STATIC_LIBRARY_LINKER__wildboids_sim_Release CMakeFiles/wildboids_sim.dir/src/simulation/rigid_body.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/boid.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/world.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/spatial_grid.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/sensory_system.cpp.o CMakeFiles/wildboids_sim.dir/src/simulation/food_source.cpp.o CMakeFiles/wildboids_sim.dir/src/io/boid_spec.cpp.o CMakeFiles/wildboids_sim.dir/src/io/sim_config.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/direct_wire_network.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/neat_genome.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/neat_network.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/innovation_tracker.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/mutation.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/crossover.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/speciation.cpp.o CMakeFiles/wildboids_sim.dir/src/brain/population.cpp.o
   ARCH_FLAGS = -arch arm64
   CONFIG = Release
   LANGUAGE_COMPILE_FLAGS = -O3 -DNDEBUG
@@ -410,6 +419,15 @@ build CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o: CXX_COMPILER__
   OBJECT_FILE_DIR = CMakeFiles/wildboids_tests.dir/tests
   TARGET_SUPPORT_DIR = CMakeFiles/wildboids_tests.dir
 
+build CMakeFiles/wildboids_tests.dir/tests/test_food_source.cpp.o: CXX_COMPILER__wildboids_tests_unscanned_Release /Users/danolner/Code/claude/wildboids/tests/test_food_source.cpp || cmake_object_order_depends_target_wildboids_tests
+  CONFIG = Release
+  DEP_FILE = CMakeFiles/wildboids_tests.dir/tests/test_food_source.cpp.o.d
+  FLAGS = -O3 -DNDEBUG -std=gnu++20 -arch arm64
+  INCLUDES = -I/Users/danolner/Code/claude/wildboids/src -I/Users/danolner/Code/claude/wildboids/build-release/_deps/json-src/include -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-src/src/catch2/.. -I/Users/danolner/Code/claude/wildboids/build-release/_deps/catch2-build/generated-includes
+  OBJECT_DIR = CMakeFiles/wildboids_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles/wildboids_tests.dir/tests
+  TARGET_SUPPORT_DIR = CMakeFiles/wildboids_tests.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target wildboids_tests
@@ -418,7 +436,7 @@ build CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o: CXX_COMPILER__
 #############################################
 # Link the executable wildboids_tests
 
-build wildboids_tests wildboids_tests-b12d07c_tests.cmake | ${cmake_ninja_workdir}wildboids_tests-b12d07c_tests.cmake: CXX_EXECUTABLE_LINKER__wildboids_tests_Release CMakeFiles/wildboids_tests.dir/tests/test_vec2.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_rigid_body.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_thruster.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid_spec.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_world.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_toroidal.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_spatial_grid.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_sensor.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_direct_wire.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_neat_genome.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_neat_network.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid_brain.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_innovation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_mutation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_crossover.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_speciation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_population.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_food.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_evolution.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_headless.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o | libwildboids_sim.a _deps/catch2-build/src/libCatch2Main.a _deps/catch2-build/src/libCatch2.a || _deps/catch2-build/src/libCatch2.a _deps/catch2-build/src/libCatch2Main.a libwildboids_sim.a
+build wildboids_tests wildboids_tests-b12d07c_tests.cmake | ${cmake_ninja_workdir}wildboids_tests-b12d07c_tests.cmake: CXX_EXECUTABLE_LINKER__wildboids_tests_Release CMakeFiles/wildboids_tests.dir/tests/test_vec2.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_rigid_body.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_thruster.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid_spec.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_world.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_toroidal.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_spatial_grid.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_sensor.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_direct_wire.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_neat_genome.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_neat_network.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_boid_brain.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_innovation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_mutation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_crossover.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_speciation.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_population.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_food.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_evolution.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_headless.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o CMakeFiles/wildboids_tests.dir/tests/test_food_source.cpp.o | libwildboids_sim.a _deps/catch2-build/src/libCatch2Main.a _deps/catch2-build/src/libCatch2.a || _deps/catch2-build/src/libCatch2.a _deps/catch2-build/src/libCatch2Main.a libwildboids_sim.a
   CONFIG = Release
   FLAGS = -O3 -DNDEBUG -arch arm64
   LINK_FLAGS = -Wl,-search_paths_first -Wl,-headerpad_max_install_names

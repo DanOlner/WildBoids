@@ -1726,3 +1726,73 @@ Without `--champion`, the GUI spawns boids with random NEAT weights (default beh
 cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release
 ```
+
+---
+
+### Step 5.7: Shared sim config + food source abstraction (170 → 182 tests)
+
+Two changes in one step: (a) unified world config loading so headless runner and GUI share the same physics settings, and (b) a food source abstraction allowing switchable food spawning strategies via `sim_config.json`.
+
+#### 5.7a: Shared sim config
+
+Both `wildboids` (GUI) and `wildboids_headless` previously had hardcoded world defaults that diverged (different world sizes, food counts, metabolism, drag). Now both load from `data/sim_config.json` on startup via `load_sim_config()`, ensuring champions evolved headless replay with identical physics in the GUI.
+
+**Files created:**
+- `src/io/sim_config.h` — `SimConfig` struct wrapping `WorldConfig` + `PopulationParams` + evolution run params
+- `src/io/sim_config.cpp` — JSON parser for `sim_config.json`, populates all config structs
+
+**Files modified:**
+- `src/headless_main.cpp` — Loads config from `--config` flag (default: `data/sim_config.json`), CLI flags override JSON values. Added `--angular-drag` and `--linear-drag` flags.
+- `src/main.cpp` — Loads config from `--config` flag, window size matches world size from config
+- `CMakeLists.txt` — Added `sim_config.cpp` to library
+- `tests/test_sim_config.cpp` — Created: 6 tests (load, defaults, missing file, uniform/patch/default food mode parsing)
+- `tests/test_boid_spec.cpp` — Changed hardcoded `max_thrust` check to `> 0` so tweaking `simple_boid.json` doesn't break tests
+
+#### 5.7b: Food source abstraction
+
+Extracted food spawning from `World::spawn_food()` into a `std::variant<UniformFoodSource, PatchFoodSource>` strategy. `World` still owns the food vector; the food source is a spawning strategy only. `check_food_eating()` and sensors are unchanged.
+
+**Uniform mode** (default, backward compatible): Same as before — probabilistic spawning at random positions, capped at `max_food`.
+
+**Patch mode**: N tightly clustered food sites (normal distribution around random centers). When total food drops by one patch's worth, a new patch spawns at a random location. This creates foraging pressure — boids must navigate to food clusters, and simple "drift forward" strategies are insufficient.
+
+**Files created:**
+- `src/simulation/food_source.h` — `UniformFoodConfig`, `PatchFoodConfig` config structs; `UniformFoodSource`, `PatchFoodSource` classes; `FoodSourceConfig` and `FoodSource` as `std::variant` aliases; `make_food_source()` factory
+- `src/simulation/food_source.cpp` — Both implementations. Patch spawning uses `std::normal_distribution` around random centers with toroidal wrapping.
+- `tests/test_food_source.cpp` — 9 tests: pre-seed counts, clustering validation, patch respawn on depletion, no over-spawn, partial depletion doesn't trigger, world integration, backward compat with flat config fields
+
+**Files modified:**
+- `src/simulation/world.h` — Added `FoodSourceConfig` to `WorldConfig`, `FoodSource food_source_` member to `World`, `pre_seed_food(rng)` public method
+- `src/simulation/world.cpp` — Constructor syncs flat `WorldConfig` fields into `UniformFoodConfig` for backward compat with existing tests. `spawn_food()` delegates to food source via `std::visit`. Added `pre_seed_food()`.
+- `src/io/sim_config.cpp` — Parses `"mode"` key in food section: `"uniform"` (default if absent) or `"patches"`
+- `src/headless_main.cpp` — Replaced manual food pre-seed loop with `world.pre_seed_food(rng)`
+- `CMakeLists.txt` — Added `food_source.cpp` to library, `test_food_source.cpp` to tests
+
+**Config format:**
+
+Uniform (backward compatible — no `mode` key needed):
+```json
+"food": { "spawnRate": 5.0, "max": 80, "eatRadius": 10.0, "energy": 15.0 }
+```
+
+Patches:
+```json
+"food": { "mode": "patches", "numPatches": 2, "foodPerPatch": 30, "patchRadius": 50.0, "eatRadius": 10.0, "energy": 15.0 }
+```
+
+**Backward compatibility:** Existing tests that set flat `WorldConfig` fields (`food_spawn_rate`, `food_max`, etc.) continue to work — the `World` constructor syncs these into a `UniformFoodConfig` when the variant is still the default.
+
+**Phase 5 progress summary (updated):**
+
+| Step | Description | Status | Tests |
+|------|-------------|--------|-------|
+| 5.1 | Innovation tracker + mutation | Done | 22 |
+| 5.2 | Crossover | Done | 8 |
+| 5.3 | Speciation + population | Done | 16 |
+| 5.4 | Food, energy, fitness evaluation | Done | 12 |
+| 5.5 | Evolution loop integration | Done | 4 |
+| 5.5b | Food sensors | Done | 7 |
+| 5.6 | Headless runner | Done | 3 |
+| 5.7 | Shared config + food source abstraction | Done | 15 |
+
+Total tests: 182.

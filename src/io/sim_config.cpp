@@ -28,10 +28,27 @@ SimConfig load_sim_config(const std::string& path) {
     // Food
     if (j.contains("food")) {
         const auto& f = j["food"];
-        cfg.world.food_spawn_rate = f.value("spawnRate", cfg.world.food_spawn_rate);
-        cfg.world.food_max = f.value("max", cfg.world.food_max);
         cfg.world.food_eat_radius = f.value("eatRadius", cfg.world.food_eat_radius);
-        cfg.world.food_energy = f.value("energy", cfg.world.food_energy);
+
+        std::string mode = f.value("mode", std::string("uniform"));
+        if (mode == "patches") {
+            PatchFoodConfig pc;
+            pc.num_patches = f.value("numPatches", pc.num_patches);
+            pc.food_per_patch = f.value("foodPerPatch", pc.food_per_patch);
+            pc.patch_radius = f.value("patchRadius", pc.patch_radius);
+            pc.energy = f.value("energy", pc.energy);
+            cfg.world.food_source_config = pc;
+        } else {
+            UniformFoodConfig uc;
+            uc.spawn_rate = f.value("spawnRate", uc.spawn_rate);
+            uc.max_food = f.value("max", uc.max_food);
+            uc.energy = f.value("energy", uc.energy);
+            cfg.world.food_source_config = uc;
+            // Also populate flat fields for backward compat
+            cfg.world.food_spawn_rate = uc.spawn_rate;
+            cfg.world.food_max = uc.max_food;
+            cfg.world.food_energy = uc.energy;
+        }
     }
 
     // Energy

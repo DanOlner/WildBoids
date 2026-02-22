@@ -1,15 +1,17 @@
 {
     "world": {
-        "width": 800,
-        "height": 800,
+        "width": 1000,
+        "height": 1000,
         "toroidal": true,
         "linearDrag": 0.02,
-        "angularDrag": 1.75,
+        "angularDrag": 0.5,
         "gridCellSize": 100
     },
     "food": {
-        "spawnRate": 5.0,
-        "max": 80,
+        "mode": "patches",
+        "numPatches": 1,
+        "foodPerPatch": 20,
+        "patchRadius": 30.0,
         "eatRadius": 10.0,
         "energy": 15.0
     },
@@ -30,7 +32,7 @@
         "weightSigma": 0.5,
         "weightReplaceProb": 0.1,
         "crossoverProb": 0.75,
-        "compatThreshold": 3.0,
+        "compatThreshold": 0.5,
         "survivalRate": 0.25,
         "elitism": 1,
         "maxStagnation": 15

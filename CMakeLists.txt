@@ -35,6 +35,7 @@ add_library(wildboids_sim
     src/simulation/world.cpp
     src/simulation/spatial_grid.cpp
     src/simulation/sensory_system.cpp
+    src/simulation/food_source.cpp
     src/io/boid_spec.cpp
     src/io/sim_config.cpp
     src/brain/direct_wire_network.cpp
@@ -74,6 +75,7 @@ add_executable(wildboids_tests
     tests/test_evolution.cpp
     tests/test_headless.cpp
     tests/test_sim_config.cpp
+    tests/test_food_source.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)
