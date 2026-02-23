@@ -3,13 +3,13 @@
         "width": 1000,
         "height": 1000,
         "toroidal": true,
-        "linearDrag": 0.02,
-        "angularDrag": 0.5,
+        "linearDrag": 0.1,
+        "angularDrag": 1.25,
         "gridCellSize": 100
     },
     "food": {
         "mode": "patches",
-        "numPatches": 1,
+        "numPatches": 4,
         "foodPerPatch": 20,
         "patchRadius": 30.0,
         "eatRadius": 10.0,
