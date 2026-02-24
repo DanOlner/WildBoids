@@ -4,7 +4,7 @@
         "height": 1000,
         "toroidal": true,
         "linearDrag": 0.1,
-        "angularDrag": 1.25,
+        "angularDrag": 1.75,
         "gridCellSize": 100
     },
     "food": {
@@ -26,7 +26,7 @@
         "saveInterval": 10
     },
     "neat": {
-        "addNodeProb": 0.03,
+        "addNodeProb": 0.1,
         "addConnectionProb": 0.05,
         "weightMutateProb": 0.8,
         "weightSigma": 0.5,

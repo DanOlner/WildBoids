@@ -1452,3 +1452,85 @@ if (gen_timer >= GEN_LENGTH_SECONDS) {
 Then **try Option D** (simple steady-state) as a second mode, toggled by a key press. This lets you compare the two approaches visually. Option D doesn't need `Population` at all — just the crossover and mutation functions directly.
 
 Both options are buildable in a single step from the current codebase. The existing 164 tests continue to validate the underlying NEAT machinery regardless of which high-level loop drives it.
+
+---
+
+## Neural Complexity Cost: "Brains Are Merely Warm"
+
+*Added 23.2.26 — reflecting on observed evolution runs where structural complexity grows without corresponding fitness improvement.*
+
+### The Problem: Neutral Bloat
+
+In early evolution runs (food-only, no predators), we observed:
+
+- Fitness peaks early (around generation 6–8) with weight tuning alone
+- NEAT continues adding hidden nodes in later generations (gen 26: 2 hidden, gen 45: 4 hidden with `addNodeProb` raised to 0.1)
+- The extra structural complexity doesn't correspond to fitness improvement — the champion at gen 45 isn't meaningfully better at foraging than the champion at gen 6
+
+This is the bloat problem described in the NEAT section above, but now observed in practice. Without selection pressure *against* complexity, structural mutations accumulate as neutral drift. The hidden nodes aren't helping, but they aren't hurting enough to be selected against either.
+
+### Biological Motivation
+
+In biology, brains are the most metabolically expensive organs per unit mass. The human brain is ~2% of body weight but consumes ~20% of metabolic energy. This creates strong selection pressure for neural efficiency — every neuron and synapse must earn its metabolic keep. As someone once put it: "Brains are merely warm." Their primary observable output is heat, and evolution only tolerates that cost because the computational benefits outweigh it.
+
+This suggests a natural solution: impose a metabolic cost for neural complexity, so that extra nodes and connections must demonstrably improve foraging (or survival) to justify their energy overhead.
+
+### Implementation Options
+
+#### Option 1: Fitness Penalty (Simplest)
+
+Subtract a complexity cost from fitness at evaluation time:
+
+```
+fitness -= node_count * cost_per_node + connection_count * cost_per_connection
+```
+
+**Pros:** Trivial to implement, no simulation changes needed, easy to tune.
+**Cons:** Artificial — the cost is imposed externally rather than emerging from the simulation. Doesn't interact with food scarcity or lifetime dynamics.
+
+#### Option 2: Per-Tick Energy Drain (Recommended)
+
+Each simulation tick, drain energy proportional to brain size:
+
+```cpp
+float brain_cost = base_brain_cost + active_connections * cost_per_connection;
+energy -= brain_cost * dt;
+```
+
+Where `active_connections` counts only enabled connections (disabled connections are dormant and cost nothing — they're "pruned synapses").
+
+**Pros:**
+- Naturalistic — bigger brains literally starve faster, creating direct pressure for efficient foraging
+- Interacts with food scarcity: when food is abundant, the cost matters less and complexity can grow; when food is scarce, lean brains win
+- Creates an emergent complexity budget: a boid can "afford" more neurons if and only if those neurons help it find enough extra food to cover their cost
+- Interacts with plasticity (when implemented): plastic connections have ongoing metabolic cost from the learning computation, adding another dimension of efficiency pressure
+
+**Cons:** Needs tuning — too high and evolution can't explore, too low and bloat continues. The cost parameters should be in `sim_config.json` for easy experimentation.
+
+#### Suggested Parameters
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `baseBrainCost` | 0.001 | Per-tick energy cost for having any brain at all |
+| `costPerConnection` | 0.0002 | Per-tick cost per enabled connection |
+| `costPerHiddenNode` | 0.0005 | Per-tick cost per hidden node (optional — connections alone may suffice) |
+
+For a minimal network (10 inputs, 4 outputs, 40 connections): `0.001 + 40 * 0.0002 = 0.009` energy per tick.
+For a bloated network (10 inputs, 4 outputs, 4 hidden, 50 connections): `0.001 + 50 * 0.0002 + 4 * 0.0005 = 0.013` energy per tick.
+
+The difference is ~44% more metabolic overhead. Over 6000 ticks per generation, that's `(0.013 - 0.009) * 6000 = 24` extra energy spent — roughly 2.4 food items' worth. The 4 hidden nodes need to find at least 2–3 extra food items per generation to break even. If they don't, simpler brains outcompete them.
+
+### Expected Effects
+
+With neural complexity costs:
+
+1. **Early generations:** No effect — all networks are minimal with the same cost
+2. **Mid generations:** Structural mutations that don't improve foraging are actively selected against (they cost energy without earning it back)
+3. **Late generations:** Only hidden nodes that provide genuine computational benefit (e.g., conditional steering, food-patch memory) survive. Network size stabilises at the minimum needed for the foraging task
+4. **Different food layouts → different optimal complexity:** Uniform random food (simple task) should select for lean networks. Clustered patch food (requires navigation between patches) should tolerate more complexity because the computational benefit is greater
+
+This creates a natural "complexity dial" driven by task difficulty — exactly the property we want before introducing predators, which will demand more sophisticated neural processing and should drive complexity upward for legitimate computational reasons.
+
+### Relationship to Pruning
+
+Neural complexity cost is complementary to, not a replacement for, connection/node deletion mutations. Deletion mutations provide the *mechanism* for shrinking networks; complexity cost provides the *selection pressure* that makes shrinking beneficial. Without deletion mutations, bloated networks can only lose their extra nodes through death (the whole genome is discarded). With both mechanisms, evolution can incrementally trim unnecessary structure from otherwise-fit genomes.
