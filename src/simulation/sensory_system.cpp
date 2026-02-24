@@ -27,6 +27,7 @@ static bool passes_filter(EntityFilter filter, const std::string& type) {
         case EntityFilter::Prey:     return type == "prey";
         case EntityFilter::Predator: return type == "predator";
         case EntityFilter::Food:     return false; // food filter doesn't match boids
+        case EntityFilter::Speed:    return false; // proprioceptive, not spatial
     }
     return false;
 }
@@ -72,6 +73,14 @@ float SensorySystem::evaluate_sensor(const SensorSpec& spec,
                                       const SpatialGrid& grid,
                                       const WorldConfig& config,
                                       const std::vector<Food>& food) const {
+    // Proprioceptive sensors — read internal state, no spatial query
+    if (spec.filter == EntityFilter::Speed) {
+        float speed = self.body.velocity.length();
+        float max_speed = config.max_speed;
+        if (max_speed <= 0.0f) return 0.0f;
+        return std::min(1.0f, speed / max_speed);
+    }
+
     float range_sq = spec.max_range * spec.max_range;
     float nearest_dist_sq = range_sq + 1.0f;
     int count = 0;

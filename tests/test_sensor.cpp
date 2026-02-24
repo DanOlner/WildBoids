@@ -363,3 +363,149 @@ TEST_CASE("World runs food sensors via step()", "[sensor][food]") {
     // Food sensor should have detected the food
     CHECK(world.get_boids()[0].sensor_outputs[0] > 0.0f);
 }
+
+// ---- Speed (proprioceptive) sensor tests ----
+
+TEST_CASE("Speed sensor: stationary boid returns 0", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    auto boids = make_boids(make_boid({400, 400}));
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+    world.add_boid(std::move(boids[0]));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Speed sensor: moving boid returns normalized speed", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 25.0f};  // moving at 25 units/s
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    // 25 / 50 = 0.5
+    CHECK_THAT(output, WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Speed sensor: clamps to 1.0 above max_speed", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 80.0f};  // faster than max_speed
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    CHECK_THAT(output, WithinAbs(1.0f, 1e-6f));
+}
+
+TEST_CASE("Speed sensor: diagonal velocity uses magnitude", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {30.0f, 40.0f};  // magnitude = 50
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+
+    // sqrt(30² + 40²) / 50 = 50/50 = 1.0
+    CHECK_THAT(output, WithinAbs(1.0f, 0.02f));
+}
+
+TEST_CASE("Speed sensor: works alongside external sensors", "[sensor][proprioception]") {
+    // Forward boid sensor + speed sensor
+    SensorSpec boid_sensor{0, 0, 36 * DEG, 100.0f, EntityFilter::Any, SignalType::NearestDistance};
+    SensorSpec speed_sensor{1, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    SensorySystem sys({boid_sensor, speed_sensor});
+
+    Boid b0 = make_boid({400, 400});
+    b0.body.velocity = {0, 25.0f};
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+    world.add_boid(std::move(b0));
+    // Other boid 50 units ahead for the boid sensor to detect
+    world.add_boid(make_boid({400, 450}));
+    world.step(0);
+
+    float outputs[2] = {0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Boid sensor detects the other boid: 1 - (50/100) = 0.5
+    CHECK_THAT(outputs[0], WithinAbs(0.5f, 0.02f));
+    // Speed sensor: 25/50 = 0.5
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Speed sensor: integrated via World::step()", "[sensor][proprioception]") {
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_speed = 50.0f;
+    World world(config);
+
+    SensorSpec speed_sensor{0, 0, 0, 0, EntityFilter::Speed, SignalType::NearestDistance};
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 30.0f};
+    b.sensors.emplace(std::vector<SensorSpec>{speed_sensor});
+    b.sensor_outputs.resize(1, 0.0f);
+    world.add_boid(std::move(b));
+
+    world.step(0);
+
+    // 30/50 = 0.6 (approximately — dt=0 so velocity unchanged)
+    CHECK_THAT(world.get_boids()[0].sensor_outputs[0], WithinAbs(0.6f, 0.02f));
+}

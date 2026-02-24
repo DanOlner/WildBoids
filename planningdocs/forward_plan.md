@@ -1301,3 +1301,801 @@ A few things to decide before or during implementation:
 
 ---
 
+## Where next? Options from here (added 24.2.26)
+
+Phase 5 core is complete (182 tests, steps 5.1–5.7). Prey evolve nimble food foraging — they identify nearby food and steer toward it effectively. Champions from gen 45 show excellent foraging behavior. Some observed limitations worth addressing:
+
+- **Boids struggle when far from food.** Once food is outside sensor range (~120 units), boids have no gradient to follow. They rely on stumbling into range or (interestingly) using boid-detection sensors as a proxy — following other boids that may be near food.
+- **"Dead zone" behavior.** When all sensor inputs are near zero (nothing nearby), the network outputs are approximately sigmoid(bias), which produces a fixed thruster pattern. There's no evolved strategy for "explore when you see nothing."
+
+The options below are roughly ordered from "most immediately impactful on evolution quality" to "longer-term enrichment." They're not strictly sequential — several could be pursued in parallel or in any order.
+
+---
+
+### Option A: Neural complexity cost (low effort, high impact)
+
+**The problem it solves:** NEAT keeps adding hidden nodes that don't improve foraging. By gen 45, champions have 4 hidden nodes but aren't meaningfully better than gen 6 champions with none. Structural bloat without selection pressure against it.
+
+**What to do:** Per-tick energy drain proportional to brain size (see "Neural Complexity Cost" section in evolution_neuralnet_thrusters.md). Enabled connections and hidden nodes cost energy each tick. A 4-hidden-node network needs to find ~2–3 extra food items per generation just to break even against a minimal network.
+
+**Expected effect:** Network size stabilises at the minimum needed for the task. More complex food layouts (patches, scarcity) would naturally select for more complex brains, creating a task-driven complexity dial.
+
+**Effort:** Small — add a few lines to `Boid::step()`, expose parameters in `sim_config.json`.
+
+---
+
+### Option B: Generational evolution in the GUI (medium effort, high impact)
+
+**The problem it solves:** Evolution currently only runs in the headless runner or test harness. The GUI spawns boids with random weights and lets them run until they die — no reproduction, no selection, no visible evolution.
+
+**What to do:** Option B from evolution_neuralnet_thrusters.md — timed generations in the live world. Run the simulation for N seconds of sim time, then trigger a generation boundary: collect fitness, advance the `Population`, respawn with new genomes. The existing `Population` machinery is used unchanged.
+
+**What you'd see:** Boids getting visibly better at foraging across generations, in real time. Generation counter on screen, maybe a fitness graph (or just console output).
+
+**Effort:** Medium — wire `Population` into `App`, add generation timer, handle world reset. The heavy machinery already exists.
+
+---
+
+### Option C: The "no input" problem — exploration behavior
+
+**The problem it solves:** When sensors detect nothing, all inputs are 0. The network outputs sigmoid(sum_of_biases), producing a fixed thruster pattern. Boids with no nearby food or boids move in a fixed arc (or sit still) rather than exploring.
+
+Several approaches, not mutually exclusive:
+
+**C1: Bias input node.** Add a constant-1.0 input to the sensor array (a "bias sensor" that always fires). This is standard in NEAT — it gives the network a constant signal to work with, so output biases effectively become tunable even when all real sensors read zero. The minimal genome starts with connections from this bias node to all outputs. Evolution can tune these to produce a useful "default behavior" (e.g., gentle forward cruise with slight random drift).
+
+**C2: Proprioception — internal state sensors.** This is broader than just "what to do when nothing's nearby." Proprioception gives boids awareness of their own body state — the biological equivalent of knowing where your limbs are, how fast you're moving, whether you're hungry. These signals are always available regardless of what's happening externally, which makes them useful for the dead-zone problem, but their value goes well beyond that. They create a richer input space for the brain to work with, enabling conditional strategies that depend on the boid's own state.
+
+Candidate proprioceptive sensors:
+
+- **Speed** (0–1, normalised by terminal velocity). The most immediately useful. A stationary boid knows it's stationary; a fast-moving boid can learn to brake before overshooting food. Also enables "cruise control" — evolution can discover a preferred speed and correct deviations. Currently boids have no idea how fast they're going; their thrust decisions are purely reactive to external stimuli.
+
+- **Angular velocity** (-1 to 1, normalised). Tells the boid whether it's spinning. Could enable "if I'm spinning fast, stop steering" — anti-oscillation behavior. Also useful for smooth pursuit: a boid tracking food can sense its own turn rate and modulate steering to avoid overshooting. Complements speed — together they give a full picture of current motion state.
+
+- **Heading change** (-1 to 1). How much the boid's heading changed since last tick. Subtly different from angular velocity — it's the *result* of angular velocity after drag, not the raw rate. Could be redundant with angular velocity, or could provide a cleaner signal for "am I currently turning?"
+
+- **Energy level** (0–1, fraction of initial energy). Lets evolution discover energy-dependent strategies: "when energy is high, explore aggressively; when low, conserve" — or the reverse ("when low, take bigger risks to find food before dying"). This is hunger as a proprioceptive signal. With neural complexity cost (Option A), this becomes even more interesting — a boid with a costly brain needs to find food more urgently than a lean one, and can know this.
+
+- **Thruster feedback** (0–1 per thruster, or a single aggregate). What am I currently doing with my thrusters? This sounds circular — the brain sets the thrusters, why does it need to know what it set? — but with the one-tick delay in the pipeline, the brain doesn't actually know its own previous output. Thruster feedback closes that loop. It's also the prerequisite for any kind of motor learning: you can't learn "that thrust pattern worked" without knowing what the pattern was. For a minimal version, a single "total thrust" signal (sum of all thruster powers / max possible thrust) might suffice.
+
+- **Time alive** (0–1, fraction of generation length). Gives a sense of urgency — "the generation is nearly over, I should be more aggressive." In biology this would be something like circadian rhythm or seasonal awareness. Probably low priority but conceptually interesting.
+
+**Impact beyond the dead-zone problem:** Proprioception fundamentally changes what the brain can learn. Without it, the network maps `external world state → thrust commands` — a pure stimulus-response system. With it, the mapping becomes `(external state, internal state) → thrust commands` — the boid can condition its behavior on what it's currently doing. This is the difference between a thermostat (reacts to temperature) and a driver (reacts to the road *and* their own speed/steering). Some specific behaviors proprioception enables:
+
+- **Smooth pursuit**: Detect food ahead + detect own speed → modulate rear thrust to approach at controlled speed rather than slamming into food at full thrust then overshooting
+- **Exploration spirals**: No external input + detect low speed → thrust forward; no external input + detect high angular velocity → reduce steering. This produces a natural expanding spiral search pattern
+- **Energy triage**: Low energy + no food detected → reduce thrust to extend life; low energy + food detected → full thrust (worth the metabolic gamble)
+- **Oscillation damping**: High angular velocity + food signal switching sides → reduce steering gain. This directly addresses the "wiggle" behavior seen in some evolved champions that detect food but can't steer smoothly toward it
+
+**Recommendation:** Start with **speed** and **energy level** — these are the most immediately useful and easiest to implement (both are O(1) reads of existing boid state). Angular velocity is a strong third. Thruster feedback is interesting but adds 1–4 more inputs, which increases the genome size; defer unless the simpler proprioceptive sensors prove valuable. The others are speculative — implement if the first batch produces interesting results.
+
+**C3: Random noise input.** Add a sensor that outputs uniform random noise each tick. This gives the network a source of stochasticity — even with identical real-sensor readings, different ticks produce different outputs. Evolution can learn to use this as a "jitter" signal for exploration. Biologically analogous to neural noise / stochastic foraging.
+
+**Recommendation:** C1 (bias node) is nearly free and is standard NEAT practice — arguably an oversight that it's not already there. C2 (proprioception) is the richest vein — speed and energy sensors are high-impact and low-effort. C3 (noise) is interesting but harder for evolution to exploit.
+
+**Effort:** Small per sensor — extend `simple_boid.json`, add evaluation in `sensory_system.cpp`. Bias node is trivial.
+
+---
+
+### Option D: Predator co-evolution (Phase 5b — large effort, the big goal)
+
+**The problem it solves:** Prey foraging alone is a single-objective optimisation that plateaus. Predators create an arms race: prey evolve evasion, predators evolve pursuit, prey evolve better evasion. This is where the really interesting emergent behavior lives.
+
+**What's needed:**
+- Predator boid spec (own sensors, thrusters — could start identical to prey)
+- Predator energy from catching prey (within `catch_radius`)
+- Caught prey die (removed from simulation)
+- Separate `Population` for predators, co-evolving alongside prey
+- Predator fitness = total prey caught
+- Higher predator metabolism (must hunt to survive)
+
+**Prerequisites:** Prey should be reliably evolving navigational behavior first (they are). The "no input" problem (Option C) would be worth addressing first — predators that can't explore will never find prey.
+
+**Effort:** Large — new boid type, separate population, modified world step, renderer changes. But the architecture is designed for it (separate populations sharing a world).
+
+---
+
+### Option E: Food source experiments (low effort, interesting results)
+
+**The problem it solves:** Uniform random food is a simple environment. Patch-based food (already implemented) is more interesting but both are static strategies. Different food layouts create different selection pressures and may reveal whether current sensor/brain architecture is sufficient.
+
+**Ideas:**
+- **Moving food patches** — patches that drift slowly, requiring boids to track them over time (tests memory / persistent steering)
+- **Seasonal cycling** — alternate between food-rich and food-poor periods. Selects for energy conservation strategies.
+- **Gradient food** — food density highest in the center, lowest at edges (or vice versa). Tests whether boids can learn spatial preferences.
+- **Food that runs away** — food items that flee nearby boids (proto-prey for predators, useful for evolving pursuit before adding real predators)
+
+**Effort:** Low to medium — the `FoodSource` variant architecture supports new strategies cleanly.
+
+---
+
+### Option F: Replay and analysis tooling (medium effort, quality of life)
+
+**The problem it solves:** Hard to understand what evolved brains are doing. Currently you can watch a champion in the GUI, but there's no way to inspect its network, compare generations, or replay specific moments.
+
+**Ideas:**
+- **Network topology visualisation** — draw the NEAT graph (nodes + connections, colored by weight sign/magnitude) in an ImGui panel. Small networks (10–25 nodes) are easy to lay out.
+- **Fitness-over-generations graph** — even a simple console sparkline from the headless runner would help. ImPlot in the GUI would be better.
+- **Champion replay gallery** — load multiple champions from different generations and watch them side-by-side in split viewports.
+- **Sensor signal inspector** — click a boid, see its sensor values and thruster outputs as bar charts in real time.
+
+**Effort:** Medium to large depending on scope. ImGui integration is Phase 6 in the plan but individual pieces (like console graphs) are quick.
+
+---
+
+### Option G: Recurrent connections (medium effort, speculative)
+
+**The problem it solves:** Current networks are feed-forward — every tick is independent. A boid can't "remember" that it saw food to the left 5 ticks ago. Recurrent connections (a node's output feeding back to itself or a predecessor) provide a form of short-term memory.
+
+**What NEAT already supports:** The genome representation allows cycles. The missing piece is the activation strategy — instead of topological sort (which requires a DAG), recurrent connections use the previous tick's activation value. This is a small change to `NeatNetwork::activate()`.
+
+**Why it might help:** The "no input" problem is partly a memory problem. A boid that detected food 10 ticks ago should continue steering toward where it was, not instantly lose the signal. Recurrent connections could implement "I was recently heading toward food" persistence.
+
+**Risk:** Recurrent networks can oscillate. May need damping or careful activation function choices. Also harder to debug and reason about.
+
+**Effort:** Medium — modify network activation to handle cycles, allow NEAT mutations to create recurrent connections (currently add-connection only creates feed-forward ones).
+
+---
+
+### Suggested sequencing
+
+For the most impactful progression:
+
+1. **C1 (bias node)** — trivial, should have been there from the start
+2. **C2 (speed sensor)** — gives boids self-awareness of movement state
+3. **A (neural complexity cost)** — prevents bloat, creates efficiency pressure
+4. **B (GUI evolution)** — makes evolution visible and interactive
+5. **D (predators)** — the big milestone, transforms the project
+
+Options E, F, and G can slot in anywhere as interest dictates. E (food experiments) is particularly good for validating whether the current architecture handles different selection pressures before committing to predators.
+
+---
+
+### Option H: Observation framework and steerable fitness (added 24.2.26)
+
+This cuts across Options B (GUI evolution) and F (analysis tooling) but is a distinct architectural idea: a framework for **extracting structured observations from the simulation** and **using those observations to drive program behavior**, not just to display them. "Drive program behavior" is deliberately broad — observations should be a general-purpose event source that different systems can subscribe to. Shaping fitness is one use. Others: triggering a state save when an interesting threshold is crossed ("save the population when mean velocity alignment exceeds 0.5 for the first time"), halting a headless run early when fitness plateaus, logging a detailed snapshot when a boid achieves a new record, or switching food source strategy mid-run when the population reaches a certain competence level. 
+
+The key architectural point is that observations are **computed once and available to many consumers** — the fitness system, the save system, the GUI, the logger — rather than each system re-deriving what it needs from raw world state.
+
+Three capabilities, layered:
+
+**(a) Observation layer — interrogating the simulation for emergent properties**
+
+Currently fitness is a single number: `total_energy_gained`. But the interesting things happening in the simulation — flocking, dispersion patterns, pursuit behavior, correlated movement — are invisible to the evolutionary process. We can *see* them in the GUI but can't measure them, log them, or select for them.
+
+An observation layer would compute derived metrics from world state each tick (or at intervals, or at generation boundaries). These are not sensor inputs to the brain — the boids don't perceive them. They're observations *about* the population for the experimenter.
+
+**Candidate metrics:**
+
+Spatial/collective:
+- **Velocity alignment** — mean cosine similarity of velocity vectors across all (or nearby) boids. High values = flocking / correlated movement. Can be computed per-neighborhood using the spatial grid: for each boid, average alignment with its k nearest neighbors. A population-wide mean gives a single "flockiness" number per tick.
+- **Spatial dispersion** — variance of inter-boid distances, or nearest-neighbor distance distribution. Low dispersion = clustering. High dispersion = spread out. The ratio of mean nearest-neighbor distance to expected-if-uniform tells you whether boids are clumping.
+- **Group size distribution** — using the spatial grid, count connected components where boids are within some threshold distance. How many groups? How big is the largest? Do groups persist over time or form and dissolve? This is more expensive to compute but captures real flocking structure.
+- **Territory fidelity** — do individual boids return to the same areas? Track each boid's position history (ring buffer of last N positions) and measure how much their range overlaps across time windows. High fidelity = territorial behavior, low = nomadic.
+- **Movement efficiency** — food gathered per unit distance traveled. A boid that travels 5000 units and finds 3 food items is less efficient than one that travels 2000 units and finds 5. This separates "good at navigating to food" from "good at covering ground."
+
+Individual behavioral:
+- **Turn rate distribution** — histogram of angular velocity magnitudes across the population. Smooth foragers will cluster at low turn rates; erratic spinners at high rates. The shape of this distribution characterizes the population's movement style.
+- **Speed distribution** — same idea. Are boids evolving a preferred cruising speed? Is there bimodality (some fast, some slow)?
+- **Sensor-thruster correlation** — for each boid, compute the correlation between sensor inputs and thruster outputs over a time window. High correlation = reactive behavior. Low correlation = the brain is doing something more complex (or nothing useful). This directly measures whether the evolved network is actually using its sensors.
+- **Food approach trajectories** — when a boid eats food, what did its path look like in the 50 ticks before eating? Straight approach? Spiral? Lucky collision? Classifying these trajectories tells you *how* the population is foraging, not just *how much*.
+
+**Implementation sketch:**
+
+```cpp
+// src/simulation/observer.h
+
+struct ObservationSnapshot {
+    int tick;
+    float mean_velocity_alignment;    // [-1, 1]
+    float mean_nearest_neighbor_dist;
+    float spatial_dispersion;         // variance of NN distances
+    float mean_speed;
+    float mean_angular_velocity;
+    float food_eaten_this_interval;
+    int alive_count;
+    int group_count;                  // connected components within threshold
+    float movement_efficiency;        // food per unit distance
+    // ... extensible
+};
+
+class Observer {
+public:
+    // Register which metrics to compute (not all are cheap)
+    void enable(ObservationMetric metric);
+
+    // Called each tick (or every N ticks for expensive metrics)
+    void observe(const World& world, int tick);
+
+    // Retrieve accumulated data
+    const std::vector<ObservationSnapshot>& snapshots() const;
+
+    // Summary statistics over a generation
+    ObservationSummary summarize(int from_tick, int to_tick) const;
+
+    void clear();
+};
+```
+
+The `Observer` sits *outside* the simulation — it reads `const World&` and produces data. It never modifies world state. This is critical: observations are a read-only lens, not a feedback loop into the physics. The simulation library stays pure.
+
+Expensive metrics (group counting, trajectory classification) should be computed at lower frequency — every 100 ticks rather than every tick. Cheap metrics (mean speed, alignment) can run every tick with negligible cost for 150 boids.
+
+For headless runs, the observer writes CSV or structured logs alongside the fitness CSV. For the GUI, observations feed into live displays — potentially just console output initially, ImPlot graphs later.
+
+**(b) Observation-triggered actions — the observer as an event source**
+
+The observer computes metrics. But metrics sitting in a vector are inert — something needs to *react* to them. Rather than hardwiring specific reactions, the observer should expose a simple event/callback interface that other systems subscribe to.
+
+**Concrete examples of observation-triggered actions:**
+
+- **Auto-save on milestones.** "Save the entire population state when mean velocity alignment first exceeds 0.4." You spot an interesting behavior emerging — you want to capture the genomes that produced it, not just the final champion. Currently the headless runner only saves the best-fitness genome; this would save the full population snapshot (all genomes, current species structure, the observation values that triggered the save).
+
+- **Save on fitness plateau.** "If best fitness hasn't improved for 20 generations, save the population and log the observation state." Plateaus are interesting — they're the moments where NEAT is searching for structural innovations. Having the genome population from that moment lets you restart from the plateau with different parameters.
+
+- **Conditional environment changes.** "When mean movement efficiency exceeds threshold X, switch from uniform food to patch food." This creates a curriculum — the environment gets harder as the population gets better. The food source variant architecture already supports swapping strategies; the observer provides the trigger signal.
+
+- **Early stopping.** "If mean fitness hasn't improved in 50 generations AND species count has collapsed to 1, halt — this run is stuck." Saves compute on headless runs that have stalled.
+
+- **Detailed snapshot logging.** "Every time a boid achieves a new all-time-best fitness, log its full trajectory (position history, sensor history, thruster history) for the last 200 ticks." This produces the data for Option F's "food approach trajectory" analysis without recording everything for every boid (which would be prohibitively expensive).
+
+- **GUI notifications.** "Flash the generation counter when a new species appears." Low-priority but makes the GUI more informative.
+
+**Design sketch — observer callbacks:**
+
+```cpp
+// Observer emits events that consumers subscribe to
+using ObservationCallback = std::function<void(const ObservationSnapshot&, const World&)>;
+
+class Observer {
+public:
+    // ... existing observe(), snapshots(), etc.
+
+    // Threshold triggers — fire once when condition first becomes true
+    void on_threshold(ObservationMetric metric, float threshold,
+                      ThresholdDirection direction,  // Above or Below
+                      ObservationCallback callback);
+
+    // Periodic — fire every N observations
+    void on_interval(int every_n_observations, ObservationCallback callback);
+
+    // Plateau detection — fire when metric hasn't changed by more than
+    // epsilon for N consecutive observations
+    void on_plateau(ObservationMetric metric, int window, float epsilon,
+                    ObservationCallback callback);
+};
+```
+
+The callback receives `const ObservationSnapshot&` (the metrics) and `const World&` (the full state, for saving). It's a read-only interface — callbacks can log, save, and signal other systems, but can't modify the world. Environment changes (like switching food source) would go through a separate command queue that the main loop drains between ticks, keeping the observer→action path clean.
+
+**Config-driven triggers (headless):**
+
+```json
+"triggers": [
+    {
+        "condition": { "metric": "velocity_alignment", "above": 0.4 },
+        "action": "save_population",
+        "once": true
+    },
+    {
+        "condition": { "metric": "best_fitness", "plateau_generations": 20 },
+        "action": "save_population"
+    },
+    {
+        "condition": { "metric": "best_fitness", "plateau_generations": 50,
+                       "and": { "metric": "species_count", "below": 2 } },
+        "action": "halt"
+    }
+]
+```
+
+This is simple enough to implement without a full expression language — a flat list of conditions with optional `"and"` conjunctions. More complex logic can live in code rather than config.
+
+**(c) Steerable fitness — user-defined evolutionary objectives**
+
+This is the more ambitious part. Instead of `fitness = total_energy_gained`, allow the fitness function to be a weighted combination of survival fitness and observation-derived objectives. The experimenter (via config or GUI controls) decides what to optimize for.
+
+**Why this matters:** Survival fitness alone selects for whatever works — which might be boring. A boid that sits near a food-rich patch and barely moves is fitter than an elegant swooping forager that covers more ground but wastes energy. By adding secondary objectives, you can steer evolution toward *interesting* behaviors without hand-designing them.
+
+**Design — fitness as a weighted sum:**
+
+```json
+// In sim_config.json:
+"fitness": {
+    "components": [
+        { "metric": "total_energy_gained", "weight": 1.0 },
+        { "metric": "velocity_alignment_with_neighbors", "weight": 0.3 },
+        { "metric": "movement_efficiency", "weight": 0.2 },
+        { "metric": "distance_traveled", "weight": 0.1 }
+    ],
+    "normalization": "rank"
+}
+```
+
+Each component is a metric that the observer computes per-boid (or per-boid from population statistics). The fitness function combines them:
+
+```
+fitness = Σ (weight_i × normalized_metric_i)
+```
+
+**Normalization matters.** Raw metric values have different scales — energy might range 0–500, alignment -1 to 1, distance 0–50000. Options:
+- **Rank-based**: Convert each metric to a rank within the population (1 = best, N = worst), then weight the ranks. Simple, robust, scale-independent. This is essentially [NSGA-II](https://ieeexplore.ieee.org/document/996017)-style multi-objective handling simplified to a weighted sum.
+- **Z-score**: Normalize each metric to mean 0, std 1 within the population. Sensitive to outliers but preserves magnitude differences.
+- **Min-max**: Scale each to [0, 1] within the population. Simple but sensitive to extreme values.
+
+Rank-based is probably the right default — it's what you'd want when mixing metrics with incompatible scales.
+
+**Per-boid vs population-level metrics:** Some metrics are naturally per-boid (distance traveled, food eaten, movement efficiency). Others are population-level (mean alignment, spatial dispersion). For fitness, we need per-boid values. Population-level metrics can be decomposed:
+- Velocity alignment → each boid's alignment with its neighbors (per-boid)
+- Spatial dispersion → each boid's contribution to clustering (per-boid nearest-neighbor distance)
+- Group membership → each boid's group size (per-boid)
+
+**The flocking example in detail:** You observe that some evolution runs produce boids with correlated movement vectors and want to select for this. The setup:
+
+1. Observer computes `velocity_alignment_with_neighbors` per boid each tick: average cosine similarity of this boid's velocity with all boids within 100 units. Range [-1, 1], higher = more aligned.
+2. At generation end, each boid's mean alignment over its lifetime becomes a fitness component.
+3. Config: `{ "metric": "velocity_alignment_with_neighbors", "weight": 0.5 }` alongside `{ "metric": "total_energy_gained", "weight": 1.0 }`.
+4. Evolution now selects for boids that both eat well *and* move in the same direction as their neighbors.
+
+The result should be recognizable flocking — but evolved, not hand-coded. The boids have to discover, through their sensor→brain→thruster pipeline, that matching neighbors' headings is rewarded. This is fundamentally different from Boids-algorithm flocking rules — the behavior is *evolved from neural architecture*, not *programmed*.
+
+**Tension with "natural" evolution:** There's a philosophical question here. Adding velocity alignment to fitness is artificial selection — you're imposing a goal that doesn't emerge from the boid's ecological situation. A biologist might object: if flocking is adaptive, it should emerge from predation pressure (safety in numbers) without needing to be directly rewarded.
+
+Both approaches are valid but answer different questions:
+- **Natural fitness only** (energy gained, survival): "What behaviors emerge from the ecological pressures?" This is the simulation-as-experiment approach.
+- **Steerable fitness**: "Can we evolve specific behaviors using this neural architecture?" This is the simulation-as-tool approach. It tests the *expressiveness* of the sensor→brain→thruster pipeline. If you can't evolve flocking even when directly rewarding it, the architecture has a gap.
+
+The framework should support both. The default config has only `total_energy_gained` with weight 1.0 — pure natural selection. Users add secondary objectives when they want to explore the architecture's capability space.
+
+**GUI interaction — live fitness steering:**
+
+In the GUI (with Option B's generational evolution running), the experimenter could adjust fitness weights mid-run:
+- Slider for each enabled metric's weight
+- See the effect on evolved behavior within a few generations
+- "What happens if I suddenly reward flocking at generation 50?"
+- "What if I remove all survival pressure and only reward speed?"
+
+This turns the GUI into an interactive evolution lab. It's not essential for the first implementation — config-file weights work for headless runs — but it's where the GUI version becomes qualitatively more powerful than headless.
+
+**Multi-objective evolution (future extension):** The weighted-sum approach collapses multiple objectives into a scalar. True multi-objective optimization (Pareto frontiers, NSGA-II) would maintain a population that explores the tradeoff surface — some boids are great foragers but don't flock, others flock beautifully but find less food, and the algorithm preserves both. This is a natural extension but significantly more complex (requires replacing the single-species tournament selection with Pareto-dominance ranking). Worth noting as a possibility but not for v1.
+
+**Implementation sequence:**
+
+1. **Observer core** — `Observer` class, `ObservationSnapshot`, cheap metrics (mean speed, alignment, alive count). Wire into headless runner to produce CSV alongside fitness data. This is useful immediately for understanding evolution runs, independent of everything else.
+
+2. **Observation triggers** — callback/threshold system on the observer. Config-driven triggers for headless runs (auto-save on milestones, early stopping on plateaus). This makes the observer *actionable*, not just informational. Population snapshot save/load is a prerequisite here.
+
+3. **Per-boid metric tracking** — extend `Boid` or use a parallel vector to accumulate per-boid lifetime metrics (distance traveled, mean alignment, mean speed). These become available as fitness components.
+
+4. **Configurable fitness function** — `FitnessConfig` in `sim_config.json`, fitness computed as weighted sum of per-boid metrics. Headless runner uses this. Replaces the hardcoded `total_energy_gained` in `Population::evaluate()`.
+
+5. **GUI controls** — sliders for fitness weights, live metric display, trigger configuration. Requires Option B (GUI evolution) to be in place first.
+
+**Files:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/simulation/observer.h/.cpp` | Create | Observation metrics computation |
+| `src/simulation/boid.h` | Modify | Add per-boid metric accumulators (distance traveled, mean alignment, etc.) |
+| `src/io/sim_config.h/.cpp` | Modify | Parse `"fitness"` config block |
+| `src/headless_main.cpp` | Modify | Wire observer, output observation CSV |
+| `src/display/app.cpp` | Modify | Wire observer for live display (later: GUI controls) |
+| `tests/test_observer.cpp` | Create | Metric computation tests |
+
+**Relationship to other options:** This subsumes parts of Option F (analysis tooling) — the observer *is* the analysis tool. It extends Option B (GUI evolution) by making fitness interactive. It's orthogonal to Options A, C, D, E, and G — those change what the boids can do; this changes how we measure and steer what they do.
+
+**Effort:** Medium for the observer layer alone (step 1). Medium-large for the full steerable fitness pipeline (steps 1–3). Large if GUI controls are included (step 4). The observer on its own is valuable even without steerable fitness — just being able to plot "mean velocity alignment over generations" from a headless run would reveal whether flocking is emerging naturally.
+
+---
+
+### Option I: Tournament assembly — mixing evolved populations (medium effort, high experimental value)
+
+**The problem it solves:** Currently, evolution runs are monolithic — one population evolves in isolation from start to finish. But the most interesting ecological questions involve interactions between populations that evolved under *different* conditions. For example:
+
+- Evolve prey foragers for 100 generations with no predators. Then introduce predators. How quickly do prey adapt evasion on top of established foraging? Compare to prey that co-evolved with predators from the start — are the specialists or the generalists better?
+- Evolve two prey populations independently with different food layouts (uniform vs patchy). Mix them in the same world. Which foraging strategy dominates? Do they coexist by exploiting different niches?
+- Evolve predators against "easy" prey (weak foragers from early generations) to bootstrap pursuit behavior, then pit them against elite foragers. Curriculum learning for predators.
+
+This is fundamentally about **composing evolutionary experiments** — treating evolved populations as building blocks that can be assembled into new scenarios.
+
+**What we have already:**
+
+The save/load infrastructure is in place:
+- `save_boid_spec()` writes complete BoidSpec JSON (body + sensors + genome)
+- `load_boid_spec()` reads them back
+- `--champion` flag loads a single champion into the GUI
+- `data/champions/` has 25+ saved champions from various runs
+- Genomes are self-contained — a saved champion file has everything needed to recreate the boid
+
+**What's missing:**
+
+1. **Multi-population loading.** The GUI currently loads one champion file and clones it N times. We need to load *multiple different* champion files and spawn a mix. The headless runner similarly evaluates one population at a time.
+
+2. **Tournament manifest file.** A JSON file that describes which populations to load, how many of each, and optionally which evolutionary parameters to use for each. This is the experiment definition.
+
+3. **Mixed-population evolution.** When evolving with multiple pre-loaded populations, the evolutionary loop needs to handle them correctly — maintaining separate species pools, or merging them into a shared gene pool, depending on the experiment design.
+
+**Tournament manifest format:**
+
+```json
+{
+    "name": "prey_foragers_vs_fresh_predators",
+    "description": "100-gen prey champions meet newly-seeded predators",
+    "world_config": "data/sim_config.json",
+    "populations": [
+        {
+            "role": "prey",
+            "source": "data/champions/prey_gen100_elite.json",
+            "count": 100,
+            "evolve": true,
+            "note": "Pre-evolved foragers, continue evolving under predation"
+        },
+        {
+            "role": "predator",
+            "source": "data/simple_predator.json",
+            "count": 30,
+            "evolve": true,
+            "note": "Fresh predators with minimal genomes, evolve from scratch"
+        }
+    ]
+}
+```
+
+Or for a mixed-prey experiment:
+
+```json
+{
+    "name": "uniform_vs_patch_foragers",
+    "populations": [
+        {
+            "role": "prey",
+            "source": "data/champions/uniform_gen80.json",
+            "count": 75,
+            "evolve": true,
+            "label": "uniform_specialists"
+        },
+        {
+            "role": "prey",
+            "source": "data/champions/patchy_gen80.json",
+            "count": 75,
+            "evolve": true,
+            "label": "patch_specialists"
+        }
+    ]
+}
+```
+
+**Key design decisions:**
+
+1. **Separate vs merged gene pools.** When two prey populations are loaded, should they evolve as separate `Population` objects (preserving lineage, no crossover between them) or merge into a single population (allowing crossover, which may produce hybrids)? Both are scientifically interesting:
+   - **Separate pools**: Tests which *strategy* wins over generations. Clean comparison. Each population's fitness trajectory is tracked independently.
+   - **Merged pool**: Tests whether combining evolved strategies produces superior hybrids. Innovation numbers may conflict between independently evolved genomes — this needs careful handling (remap innovations on merge, or treat all cross-population genes as disjoint during crossover).
+
+   Recommendation: **separate pools by default**, with an option to merge. Separate is simpler to implement (two `Population` objects sharing a world, which is already the plan for predator/prey co-evolution in Option D) and produces cleaner experimental results.
+
+2. **Frozen vs evolving populations.** Sometimes you want one population to keep evolving while another stays fixed — e.g. "how do fresh predators evolve against prey that *don't* adapt?" The `"evolve": true/false` flag handles this. Frozen populations use the loaded genome unchanged across all generations; evolving populations go through the normal NEAT cycle.
+
+3. **Population labeling.** When multiple populations share a role (two prey groups), they need labels for logging and analysis. The manifest's `"label"` field feeds into the observer (Option H) and fitness CSV output so you can track "uniform_specialists mean fitness" vs "patch_specialists mean fitness" across generations.
+
+4. **Initial genome diversity.** Loading a single champion and cloning it 100 times gives zero genetic diversity — bad for evolution. Options:
+   - **Load multiple champions** from different generations of the same run (e.g. gen 80, 85, 90, 95, 100). Each individual in the population gets one of these as its starting genome.
+   - **Mutate on load**: Apply N rounds of weight mutation to each cloned genome to create a diverse starting population from a single champion. This is standard practice — "seed population from a champion with jitter."
+   - **Load a saved population snapshot** (not just the best genome but all genomes from a generation). This requires saving full population state, which we don't currently do but would be valuable.
+
+   The manifest could support all three via the `"source"` field:
+   ```json
+   "source": "data/champions/prey_gen100.json"           // single champion, mutate to diversify
+   "source": ["data/champions/prey_gen80.json",           // array of champions
+               "data/champions/prey_gen90.json",
+               "data/champions/prey_gen100.json"]
+   "source": "data/populations/prey_run42_gen100.pop"     // full population snapshot (future)
+   ```
+
+**CLI integration:**
+
+```bash
+# Headless tournament
+./build-release/wildboids_headless --tournament data/tournaments/prey_vs_predator.json \
+    --generations 100 --save-best
+
+# GUI tournament
+./build/wildboids --tournament data/tournaments/prey_vs_predator.json
+```
+
+The `--tournament` flag replaces `--champion` (which loads a single type). When a tournament manifest is provided, boid spawning follows the manifest instead of the default single-spec path.
+
+**Relationship to other options:**
+
+- **Option D (predator co-evolution):** Tournament assembly is a *superset* of basic co-evolution. Co-evolution is "prey + predators evolving together from scratch." Tournament assembly is "any mix of pre-evolved or fresh populations in any combination." Implementing D first gives the two-population infrastructure; tournament assembly generalizes it.
+- **Option H (observations):** Population labels from the manifest feed directly into the observer — per-population fitness tracking, per-population behavioral metrics. "Are the uniform specialists clustering more than the patch specialists?"
+- **Option B (GUI evolution):** The GUI needs to display which populations are present and let the user inspect them separately — e.g. click a boid and see "uniform_specialist, gen 12 (since tournament start), original lineage: prey_gen80."
+
+**Implementation sequence:**
+
+1. **Tournament manifest parser** — load the JSON, validate populations, resolve source files. Small.
+2. **Multi-source spawning** — modify `main.cpp` and `headless_main.cpp` to spawn from manifest instead of single spec. Includes "mutate on load" for diversity. Medium.
+3. **Multi-population evolution** — support separate `Population` objects per manifest entry with `"evolve": true`. Wire into `run_generation()`. This overlaps heavily with Option D's two-population infrastructure. Medium.
+4. **Per-population logging** — label-aware CSV output, per-population fitness tracking. Small.
+5. **Population snapshot save/load** — save all genomes + species structure, not just the champion. Enables full-population seeding. Medium.
+
+**Files:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/io/tournament.h/.cpp` | Create | Tournament manifest parser |
+| `src/io/boid_spec.h/.cpp` | Modify | Support loading arrays of specs |
+| `src/main.cpp` | Modify | `--tournament` flag, multi-population spawning |
+| `src/headless_main.cpp` | Modify | Tournament mode evolution with separate populations |
+| `src/brain/population.h/.cpp` | Modify | Population snapshot save/load |
+| `data/tournaments/` | Create | Directory for tournament manifests |
+| `tests/test_tournament.cpp` | Create | Manifest parsing, multi-population spawning |
+
+**Effort:** Medium. The hardest part is multi-population evolution (step 3), but this overlaps with Option D's infrastructure. The manifest parser and multi-source spawning are straightforward. The payoff is high — this turns the project from "run evolution" into "design evolution experiments."
+
+---
+
+### Option J: Multi-seed batch runs — searching the evolutionary landscape (low-medium effort, high experimental value)
+
+**The problem it solves:** NEAT evolution is stochastic. The same configuration with seed 42 might produce elegant spiral foragers; seed 43 might produce boring straight-line movers; seed 44 might discover a completely novel strategy that neither of the others found. A single run is a single sample from a vast space of evolutionary trajectories. To understand what a configuration *can* produce — and to find the best outcomes — you need multiple independent runs.
+
+This matters beyond just finding higher peak fitness. Two runs might converge to the same fitness score but via completely different behavioral strategies. The observation framework (Option H) can detect this: one run's champions have high velocity alignment (flocking), another's have high movement efficiency (solo foragers), both scoring equally on food gathered. Without multi-seed runs, you'd only ever see whichever strategy your one seed happened to find.
+
+**What we have already:**
+
+The headless runner accepts `--seed N` and the RNG is seeded deterministically. So running the same config with different seeds already produces different evolutionary trajectories. But this is manual — you'd run the command N times with different seed values, manually compare the output CSVs, and hand-pick interesting runs. That's tedious and doesn't scale.
+
+**What's needed:**
+
+1. **Batch launcher.** Run N independent evolution runs in parallel (or sequentially), each with a different seed, same configuration. Collect all results into a structured output directory.
+
+2. **Cross-run comparison.** After all runs complete, summarize: which seed produced the best champion? Which produced the most species diversity? Which showed the most interesting observation metrics? Rank runs by multiple criteria, not just peak fitness.
+
+3. **Integration with the observation system (Option H).** This is where it gets powerful. Each run produces its own observation timeline — fitness curves, velocity alignment, spatial dispersion, species counts. The batch system can compare these *across runs* to surface outliers. "Run 7 had unusually high velocity alignment at generation 40 — worth investigating."
+
+**Batch config:**
+
+The simplest version just wraps the existing headless runner:
+
+```json
+{
+    "name": "prey_foraging_sweep",
+    "base_config": "data/sim_config.json",
+    "boid_spec": "data/simple_boid.json",
+    "generations": 100,
+    "seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "output_dir": "data/batch_runs/prey_foraging_sweep",
+    "save_interval": 10,
+    "save_best": true
+}
+```
+
+Or with auto-generated seeds:
+
+```json
+{
+    "seeds": { "count": 20, "start": 1 }
+}
+```
+
+Each run writes to its own subdirectory:
+
+```
+data/batch_runs/prey_foraging_sweep/
+├── batch_config.json          ← copy of the config used
+├── summary.csv                ← cross-run comparison table
+├── seed_001/
+│   ├── fitness.csv            ← per-generation fitness log
+│   ├── observations.csv       ← observer metrics per generation
+│   ├── champion_gen100.json   ← final champion
+│   └── champion_best.json     ← all-time best
+├── seed_002/
+│   ├── ...
+└── seed_010/
+    └── ...
+```
+
+**Cross-run summary:**
+
+After all runs complete, the batch system generates `summary.csv`:
+
+```csv
+seed, best_fitness, final_mean_fitness, peak_species, final_species, mean_velocity_alignment, mean_movement_efficiency, best_champion_file
+1,    487.3,        312.1,              8,            4,             0.12,                     0.34,                      seed_001/champion_best.json
+2,    523.8,        298.7,              12,           6,             0.41,                     0.28,                      seed_002/champion_best.json
+...
+```
+
+This table immediately shows: seed 2 found the highest fitness *and* high velocity alignment — its champions might be flocking foragers. Seed 1 had better movement efficiency — solo navigators. Both are interesting; the batch run found both where a single run would have found only one.
+
+**Parallelism:**
+
+Evolution runs are completely independent — perfect for parallelism. Options:
+
+- **Process-level parallelism (simplest).** The batch launcher spawns N instances of `wildboids_headless` as child processes, each with a different `--seed` and `--output-dir`. On a multi-core machine, this is straightforward and efficient. The launcher doesn't need to understand NEAT internals — it just runs subprocesses and collects results.
+
+- **Thread-level parallelism (more complex but natural in C++).** Run N `Population` + `World` pairs in separate `std::thread`s within a single process. Each thread owns its own `World`, `Population`, `std::mt19937`, and output buffer — no shared mutable state, so no locks needed. C++ makes this straightforward:
+
+  ```cpp
+  std::vector<std::thread> threads;
+  std::vector<RunResult> results(num_seeds);  // each thread writes its own index
+
+  for (int i = 0; i < num_seeds; i++) {
+      threads.emplace_back([&results, i, seed = seeds[i], &config, &spec]() {
+          std::mt19937 rng(seed);
+          World world(config);
+          Population pop(/* ... */, rng);
+          for (int gen = 0; gen < generations; gen++)
+              run_generation(world, pop, spec, rng);
+          results[i] = { seed, pop.best_fitness(), /* ... */ };
+      });
+  }
+  for (auto& t : threads) t.join();
+  // results[0..N] now available for cross-run comparison
+  ```
+
+  The key thing that makes this safe: `Population` already owns its own `InnovationTracker`, so there's no global state to conflict. Each thread is a fully self-contained evolution run.
+
+  **Data collection for thread-level runs** — two options:
+  - **Separate files**: Each thread writes to its own output directory (`seed_001/fitness.csv`, etc.), same format as the process-level approach. File I/O from multiple threads to *different files* is safe. After all threads join, a single-threaded summary pass reads them and produces `summary.csv`. Simple, and the output is identical whether threads or processes produced it.
+  - **In-memory collection**: Each thread accumulates per-generation stats into a `std::vector<GenerationStats>` it owns (no disk I/O during the run). After join, the main thread has everything in memory and writes it all at once. Faster for short runs, but uses more memory — trivial for 20 runs × 100 generations, worth considering for 1000+ runs.
+
+  Recommendation: separate files — it's the same format either way, and you can switch between process-level and thread-level freely without changing the analysis pipeline.
+
+  **One gotcha**: if one thread crashes (e.g. a NaN in physics), it takes down all threads. Processes are naturally isolated. Wrapping each thread body in a try/catch and recording failures in `results[i]` mitigates this. With sanitizers and the existing test coverage, crashes in practice are unlikely.
+
+Recommendation: **process-level first** (or a shell script — see below). It's simpler, naturally isolated, and the headless runner is already fast enough (~2 seconds for 100 generations in Release mode). Running 20 seeds sequentially takes ~40 seconds; in parallel across 8 cores, ~5 seconds. Thread-level is a straightforward upgrade when runs get longer (thousands of generations, or much larger populations) and the overhead of process startup or the convenience of in-memory result collection starts to matter.
+
+A simple shell script achieves the minimum viable version immediately:
+
+```bash
+#!/bin/bash
+for seed in $(seq 1 20); do
+    mkdir -p data/batch_runs/sweep/seed_$seed
+    ./build-release/wildboids_headless --seed $seed --generations 100 \
+        --save-best --output-dir data/batch_runs/sweep/seed_$seed \
+        > data/batch_runs/sweep/seed_$seed/fitness.csv &
+done
+wait
+echo "All runs complete"
+```
+
+But a proper batch system adds the cross-run summary, observation integration, and structured output that a shell script can't easily provide.
+
+**Parameter sweeps:**
+
+Once batch runs work for multiple seeds, the natural extension is varying *parameters* across runs — not just the RNG seed but configuration values. This is where the real experimental power lives. Evolution is sensitive to ecological parameters in ways that are hard to predict — does doubling metabolism rate produce leaner foragers, or does it just kill everything? Does a larger world select for faster boids or for more efficient navigators? You can hypothesize, but you need to run it to find out.
+
+**What to sweep — three categories of parameters:**
+
+1. **Ecological parameters** — the environment the boids evolve in. These directly shape selection pressure:
+   - `metabolism_rate` — how fast boids burn energy by existing. High metabolism = urgency to find food. Low = more time to explore, less pressure to be efficient.
+   - `thrust_cost` — energy cost of movement. High = selects for efficient, economical movers. Low = selects for speed and coverage.
+   - `food_spawn_rate`, `food_max` — food abundance. Scarce food = intense competition, selects for navigation precision. Abundant = weaker selection, more random drift.
+   - `food_eat_radius` — how close you need to be. Small radius = selects for precise steering. Large = coarser approach behavior is fine.
+   - Food source mode (`uniform` vs `patch`) and patch parameters — qualitatively different selection landscapes.
+   - World size — larger worlds mean food is sparser relative to sensor range, selecting for exploration strategies.
+
+2. **NEAT parameters** — the evolutionary algorithm itself:
+   - `weight_mutation_rate`, `weight_perturbation_std` — how aggressively weights change. Too low = slow learning. Too high = can't refine.
+   - `add_connection_rate`, `add_node_rate` — structural mutation rates. Controls complexity growth.
+   - `compatibility_threshold` — how different genomes must be to form new species. Low = many small species. High = few large species.
+   - `population_size` — more individuals = better search but slower per generation.
+   - `survival_rate` — selection intensity. Low survival = strong selection, fast convergence but less diversity. High = weaker selection, more exploration.
+
+3. **Body parameters** — the boid's physical capabilities:
+   - `max_thrust` values on thrusters — faster boids vs more maneuverable boids.
+   - Sensor range, arc width — what the boid can perceive.
+   - `linear_drag`, `angular_drag` — how "slippery" vs "sticky" the world feels. High drag = responsive steering. Low drag = momentum-dominated, harder to control.
+
+Each category answers a different question. Ecological sweeps ask "what environment produces the most interesting behavior?" NEAT sweeps ask "what algorithm settings work best for this problem?" Body sweeps ask "what physical capabilities are needed for effective foraging?"
+
+**Sweep config format:**
+
+```json
+{
+    "name": "metabolism_thrust_sweep",
+    "base_config": "data/sim_config.json",
+    "boid_spec": "data/simple_boid.json",
+    "generations": 100,
+    "seeds_per_combo": 5,
+    "vary": {
+        "metabolism_rate": [0.2, 0.5, 1.0, 2.0],
+        "thrust_cost": [0.05, 0.1, 0.2]
+    }
+}
+```
+
+This generates 4 × 3 × 5 = 60 runs: every combination of metabolism rate and thrust cost, each with 5 seeds. The `"vary"` keys are dotted paths into the config — `"metabolism_rate"` maps to `WorldConfig::metabolism_rate`, `"neat.add_node_rate"` would map into the NEAT params, etc.
+
+For sweeping boid body parameters (which live in the boid spec, not the world config):
+
+```json
+{
+    "vary_spec": {
+        "thrusters[0].maxThrust": [30.0, 50.0, 80.0],
+        "sensors[0].maxRange": [80.0, 120.0, 200.0]
+    }
+}
+```
+
+**Output structure:**
+
+```
+data/batch_runs/metabolism_thrust_sweep/
+├── sweep_config.json
+├── summary.csv                          ← all combos × all seeds
+├── summary_by_combo.csv                 ← averaged over seeds per combo
+├── metabolism_0.2__thrust_cost_0.05/
+│   ├── seed_1/
+│   │   ├── fitness.csv
+│   │   ├── observations.csv
+│   │   └── champion_best.json
+│   ├── seed_2/
+│   │   └── ...
+│   └── seed_5/
+│       └── ...
+├── metabolism_0.2__thrust_cost_0.1/
+│   └── ...
+└── metabolism_2.0__thrust_cost_0.2/
+    └── ...
+```
+
+The `summary_by_combo.csv` is the key output — it averages across seeds to show the effect of each parameter combination:
+
+```csv
+metabolism_rate, thrust_cost, mean_best_fitness, std_best_fitness, mean_species, mean_velocity_alignment, ...
+0.2,            0.05,        523.4,             47.2,             6.2,          0.18,                     ...
+0.2,            0.1,         487.1,             52.8,             5.8,          0.22,                     ...
+0.5,            0.05,        412.6,             39.1,             7.4,          0.31,                     ...
+...
+```
+
+Multiple seeds per combo are important — they separate "this parameter setting is genuinely better" from "this run happened to get lucky." With 5 seeds, you can compute means and standard deviations; with the observation system (Option H), you can also check whether a parameter setting reliably produces particular *behaviors*, not just particular fitness scores.
+
+**Interaction effects and the value of combinatorial sweeps:**
+
+Parameters interact in non-obvious ways. High metabolism with low thrust cost might produce fast, aggressive foragers. High metabolism with *high* thrust cost might produce boids that barely move — every option is expensive, so they sit and starve. You can't predict these interactions from single-parameter sweeps; you need the full grid (or at least a designed subset like Latin hypercube sampling if the grid is too large).
+
+The observation system makes these interactions visible. A sweep might show: "metabolism 0.5 + thrust_cost 0.1 produces the highest velocity alignment of any combination" — a result you'd never find by sweeping metabolism alone or thrust_cost alone.
+
+**Scaling considerations:**
+
+Full combinatorial grids grow fast. 4 values × 4 parameters = 256 combos × 5 seeds = 1280 runs. At ~2 seconds per run (Release mode, 100 generations), that's ~43 minutes sequential or ~5 minutes on 8 cores. Manageable. But 6 parameters with 4 values each = 4096 combos × 5 seeds = 20,480 runs — now you want thread-level parallelism and possibly a cluster.
+
+For large parameter spaces, alternatives to full grid:
+- **Latin hypercube sampling** — sample N points spread evenly across the parameter space. Much fewer runs than a full grid, still covers the space.
+- **Sequential refinement** — coarse grid first (2 values per parameter), identify interesting regions, fine grid in those regions.
+- **Bayesian optimization** — use results so far to choose the next parameter combination to try. Overkill for this project, but conceptually interesting.
+
+For v1, full grid with sensible parameter counts (2–4 values per parameter, 2–3 parameters varied at once) is plenty.
+
+**Integration with Option I (tournaments):**
+
+Multi-seed runs compose naturally with tournament assembly. "Run this tournament manifest 10 times with different seeds — how consistent is the outcome? Do uniform specialists always beat patch specialists, or does it depend on the seed?" This is statistical power for evolutionary experiments.
+
+**Integration with Option H (observations):**
+
+The observation system is what makes multi-seed runs more than just "pick the highest fitness." Observation metrics computed per-run can be compared across runs to find outliers — runs where unusual behavior emerged. The batch summary should include key observation metrics alongside fitness. Observation triggers (Option H part b) could fire per-run: "save a full population snapshot from any run where velocity alignment exceeds 0.3" — catching interesting emergent behavior across all seeds automatically.
+
+**Implementation sequence:**
+
+1. **Batch config parser** — load the JSON, generate the list of (seed, output_dir) pairs. Trivial.
+2. **Batch launcher** — spawn `wildboids_headless` subprocesses with appropriate arguments. Wait for completion. Small — essentially a subprocess manager.
+3. **Cross-run summary** — after all runs complete, read each run's fitness CSV (and observation CSV if Option H is implemented), compute summary statistics, write `summary.csv`. Small-medium.
+4. **CLI integration** — `wildboids_headless --batch data/batches/sweep.json`. Small.
+5. **Parameter sweeps** — extend batch config to vary parameters, generate combinatorial run matrix. Medium.
+
+**Files:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/batch_main.cpp` | Create | Batch launcher: parse config, spawn runs, collect results |
+| `src/io/batch_config.h/.cpp` | Create | Batch config parser |
+| `CMakeLists.txt` | Modify | Add `wildboids_batch` target |
+| `data/batches/` | Create | Directory for batch configs |
+| `tests/test_batch_config.cpp` | Create | Config parsing tests |
+
+Or, alternatively, fold batch functionality into the existing `wildboids_headless` binary with a `--batch` flag, keeping a single headless executable.
+
+**Effort:** Low-medium. The core (steps 1–3) is simple infrastructure — subprocess management and CSV aggregation. The hard thinking is in *what to compare across runs*, which is really an Option H question. The shell-script version is essentially free and useful today; the structured version adds reproducibility and observation integration.
+

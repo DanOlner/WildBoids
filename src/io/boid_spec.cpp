@@ -14,6 +14,7 @@ static EntityFilter parse_entity_filter(const std::string& s) {
     if (s == "prey") return EntityFilter::Prey;
     if (s == "predator") return EntityFilter::Predator;
     if (s == "food") return EntityFilter::Food;
+    if (s == "speed") return EntityFilter::Speed;
     return EntityFilter::Any;
 }
 
@@ -23,6 +24,7 @@ static std::string entity_filter_to_string(EntityFilter f) {
         case EntityFilter::Predator: return "predator";
         case EntityFilter::Any:      return "any";
         case EntityFilter::Food:     return "food";
+        case EntityFilter::Speed:    return "speed";
     }
     return "any";
 }

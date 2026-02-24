@@ -27,7 +27,7 @@
     },
     "neat": {
         "addNodeProb": 0.1,
-        "addConnectionProb": 0.05,
+        "addConnectionProb": 0.1,
         "weightMutateProb": 0.8,
         "weightSigma": 0.5,
         "weightReplaceProb": 0.1,

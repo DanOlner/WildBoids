@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-enum class EntityFilter { Prey, Predator, Any, Food };
+enum class EntityFilter { Prey, Predator, Any, Food, Speed };
 enum class SignalType { NearestDistance, SectorDensity };
 
 struct SensorSpec {

@@ -29,6 +29,9 @@ struct WorldConfig {
     // If left as default UniformFoodConfig, constructor syncs from flat fields.
     FoodSourceConfig food_source_config = UniformFoodConfig{};
 
+    // Proprioceptive sensor normalization
+    float max_speed = 50.0f;           // speed sensor normalization constant (speed / max_speed, clamped to [0,1])
+
     // Energy costs
     float metabolism_rate = 0.5f;      // energy lost per second just being alive
     float thrust_cost = 0.1f;          // energy cost per unit thrust per second

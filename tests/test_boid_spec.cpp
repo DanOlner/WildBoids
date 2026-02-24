@@ -37,11 +37,15 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.thrusters[3].label == "front");
 
     // Sensors
-    REQUIRE(spec.sensors.size() == 10);
+    REQUIRE(spec.sensors.size() == 11);
     CHECK(spec.sensors[0].id == 0);
     CHECK_THAT(spec.sensors[0].center_angle, WithinAbs(0.0f, 1e-4f));
     CHECK(spec.sensors[0].filter == EntityFilter::Any);
     CHECK(spec.sensors[0].signal_type == SignalType::NearestDistance);
+
+    // Speed (proprioceptive) sensor
+    CHECK(spec.sensors[10].id == 10);
+    CHECK(spec.sensors[10].filter == EntityFilter::Speed);
 }
 
 TEST_CASE("Create boid from spec", "[boid_spec]") {
@@ -61,8 +65,8 @@ TEST_CASE("Create boid from spec", "[boid_spec]") {
 
     // Sensors wired up
     REQUIRE(boid.sensors.has_value());
-    CHECK(boid.sensors->input_count() == 10);
-    CHECK(boid.sensor_outputs.size() == 10);
+    CHECK(boid.sensors->input_count() == 11);
+    CHECK(boid.sensor_outputs.size() == 11);
 }
 
 TEST_CASE("Round-trip save and reload", "[boid_spec]") {

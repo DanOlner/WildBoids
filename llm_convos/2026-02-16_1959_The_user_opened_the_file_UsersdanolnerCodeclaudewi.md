@@ -12585,3 +12585,1343 @@ That champion has **21 nodes**:
 - **7 hidden** nodes (ids 14-20, added by NEAT mutations)
 
 So NEAT added 7 hidden neurons over the course of evolution. It also has 53 connections, though many are disabled (only ~30 are active).
+
+
+## Human (157)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/step_by_step_planner.md]*
+I want to experiment with a different food layout option, slightly more faff to set up. Do we need to do any prep to loosely decouple how random food is generated? What I want to aim for: n number (1 to 3) of tightly clustered food sites, with new food sites only appearing when one is entirely gone (so need to keep track of each). The intuition: different evolutionary foraging patterns will emerge, and simple "carry on moving foward" by itself won't suffice.
+
+
+## Assistant
+
+Good thinking — clustered food patches should reward actual navigation over random drift. Let me check how food spawning currently works.
+
+
+## Assistant
+
+*[Spawned agent: Explore food spawning code]*
+
+> **Tool result:** Perfect! Now I have all the information I need. Let me create a comprehensive report.  ## Food Spawning System Report  Here's a detailed overview of the food spawning system in Wild Boids:  ### 1. Foo
+> **Tool result:** agentId: aba33c9 (for resuming to continue this agent's work if needed) <usage>total_tokens: 34715 tool_uses: 16 duration_ms: 36657</usage>
+
+
+## Assistant
+
+The current food system is simple — uniform random spawning across the whole world, capped at `food_max`. For clustered patches, the key coupling points are:
+
+1. **`World::spawn_food()`** — currently spawns at random positions. This is the main thing to replace.
+2. **`Food` struct** — has no concept of which patch it belongs to.
+3. **`WorldConfig`** — has flat `food_spawn_rate` / `food_max` params, no patch concept.
+4. **`check_food_eating()`** — just removes food and credits the boid. This is already decoupled and doesn't need to change.
+
+The cleanest approach: introduce a **`FoodSource`** abstraction so you can swap strategies via config:
+
+- **`FoodSource`** — interface with a `spawn(dt, rng) → vector<Food>` method and an `on_food_eaten()` callback
+- **`UniformFoodSource`** — current behavior (random positions, steady rate)
+- **`PatchFoodSource`** — your new idea: N clusters, each a tight radius, new patch spawns when one is depleted
+
+`World` would own a `FoodSource` and call it each step instead of its current `spawn_food()`. The eating logic stays the same — `FoodSource` just gets notified when food count drops so it can track patch depletion.
+
+Config in `sim_config.json` would look something like:
+
+```json
+"food": {
+    "mode": "patches",
+    "patches": { "count": 2, "radius": 40, "itemsPerPatch": 25 },
+    "energy": 15.0, "eatRadius": 10.0
+}
+```
+
+The prep work is minimal — just extracting `spawn_food()` out of `World` into a strategy object. Want me to implement this?
+
+
+## Human (158)
+
+Yes please, then run tests to check.
+
+
+## Assistant
+
+*[Tool: EnterPlanMode]*
+
+> **Tool result:** Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.  In plan mode, you should: 1. Thoroughly explore the codebase to understand existing pattern...
+
+
+## Assistant
+
+*[Spawned agent: Explore food system code]*
+
+> **Tool result:** Perfect! I now have all the information needed. Let me compile a comprehensive report with all the food spawning system details.  ## Food Spawning System - Complete Analysis  ### 1. **Food Struct and 
+> **Tool result:** agentId: aaa726d (for resuming to continue this agent's work if needed) <usage>total_tokens: 29760 tool_uses: 9 duration_ms: 27273</usage>
+
+
+## Assistant
+
+Good, I have a thorough picture. Now let me design the implementation.
+
+
+## Assistant
+
+*[Spawned agent: Design food source abstraction]*
+
+> **Tool result:** Now I have a thorough understanding of the codebase. Here is the implementation plan.  ---  ## FoodSource Implementation Plan  ### Design Decision: `std::variant` over virtual polymorphism  Use `std::
+> **Tool result:** agentId: aaf42ba (for resuming to continue this agent's work if needed) <usage>total_tokens: 39165 tool_uses: 18 duration_ms: 102624</usage>
+
+
+## Assistant
+
+Good plan. Let me verify one thing before writing the final plan — how `run_sensors` passes food to the sensor system, since patches shouldn't affect that.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/simulation/world.cpp`]*
+
+> **Tool result:**     38→void World::run_sensors() {     39→    for (int i = 0; i < static_cast<int>(boids_.size()); ++i) {     40→        auto& boid = boids_[i];     41→        if (!boid.alive) continue;     42→      ...
+
+
+## Assistant
+
+Good — sensors just read `food_` directly, no changes needed. Now let me write the plan.
+
+
+## Assistant
+
+*[Write: `/Users/danolner/.claude/plans/jaunty-sleeping-milner.md`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/.claude/plans/jaunty-sleeping-milner.md
+
+
+## Assistant
+
+*[Tool: ExitPlanMode]*
+
+> **Tool result:** User has approved your plan. You can now start coding. Start with updating your todo list if applicable  Your plan has been saved to: /Users/danolner/.claude/plans/jaunty-sleeping-milner.md You can re...
+
+
+## Assistant
+
+*[Todo update:]*
+  - [in_progress] Create food_source.h with config structs, source classes, variant aliases
+  - [pending] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [pending] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [pending] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [pending] Update sim_config.cpp to parse food mode
+  - [pending] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [pending] Create test_food_source.cpp
+  - [pending] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/src/simulation/food_source.h`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/Code/claude/wildboids/src/simulation/food_source.h
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [in_progress] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [pending] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [pending] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [pending] Update sim_config.cpp to parse food mode
+  - [pending] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [pending] Create test_food_source.cpp
+  - [pending] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/src/simulation/food_source.cpp`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/Code/claude/wildboids/src/simulation/food_source.cpp
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [in_progress] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [pending] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [pending] Update sim_config.cpp to parse food mode
+  - [pending] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [pending] Create test_food_source.cpp
+  - [pending] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+Now update `world.h` to add the food source config and member.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/simulation/world.h`]*
+
+> **Tool result:**      1→#pragma once      2→      3→#include "simulation/boid.h"      4→#include "simulation/spatial_grid.h"      5→#include <vector>      6→#include <random>      7→      8→struct Food {      9→    Ve...
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/src/simulation/world.h`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/simulation/world.h has been overwritten successfully.
+
+
+## Assistant
+
+Now update `world.cpp` — constructor syncs flat fields and delegates `spawn_food`.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/simulation/world.cpp`]*
+
+> **Tool result:**      1→#include "simulation/world.h"      2→#include "simulation/toroidal.h"      3→#include <cmath>      4→#include <algorithm>      5→      6→World::World(const WorldConfig& config)      7→    : con...
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/src/simulation/world.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/simulation/world.cpp has been overwritten successfully.
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [completed] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [completed] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [in_progress] Update sim_config.cpp to parse food mode
+  - [pending] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [pending] Create test_food_source.cpp
+  - [pending] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/io/sim_config.cpp`]*
+
+> **Tool result:**      1→#include "io/sim_config.h"      2→#include <nlohmann/json.hpp>      3→#include <fstream>      4→#include <stdexcept>      5→      6→using json = nlohmann::json;      7→      8→SimConfig load_si...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/io/sim_config.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/io/sim_config.cpp has been updated successfully.
+
+
+## Assistant
+
+Now update `headless_main.cpp` to use `pre_seed_food`.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/headless_main.cpp`]*
+
+> **Tool result:**     14→// run for N ticks, return fitness (total_energy_gained) for each genome.     15→static std::vector<float> run_generation(     16→    const std::vector<NeatGenome>& genomes,     17→    const Bo...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/headless_main.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/headless_main.cpp has been updated successfully.
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [completed] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [completed] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [completed] Update sim_config.cpp to parse food mode
+  - [completed] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [in_progress] Create test_food_source.cpp
+  - [pending] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/tests/test_food_source.cpp`]*
+
+> **Tool result:** File created successfully at: /Users/danolner/Code/claude/wildboids/tests/test_food_source.cpp
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [completed] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [completed] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [completed] Update sim_config.cpp to parse food mode
+  - [completed] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [completed] Create test_food_source.cpp
+  - [in_progress] Update CMakeLists.txt
+  - [pending] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/CMakeLists.txt`]*
+
+> **Tool result:**      1→cmake_minimum_required(VERSION 3.20)      2→project(wildboids LANGUAGES CXX)      3→      4→set(CMAKE_CXX_STANDARD 20)      5→set(CMAKE_CXX_STANDARD_REQUIRED ON)      6→set(CMAKE_EXPORT_COMPILE...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/CMakeLists.txt`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/CMakeLists.txt has been updated successfully.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/CMakeLists.txt`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/CMakeLists.txt has been updated successfully.
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [completed] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [completed] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [completed] Update sim_config.cpp to parse food mode
+  - [completed] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [completed] Create test_food_source.cpp
+  - [completed] Update CMakeLists.txt
+  - [in_progress] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+```bash *(Build Debug)*
+cmake --build /Users/danolner/Code/claude/wildboids/build 2>&1 | tail -30
+```
+
+> **Tool result:** [0/1] Re-running CMake... -- Using the multi-header code from /Users/danolner/Code/claude/wildboids/build/_deps/json-src/include/ -- Configuring done (0.4s) -- Generating done (0.0s) -- Build files ha...
+
+
+## Assistant
+
+Clean build. Now run tests.
+
+
+## Assistant
+
+```bash *(Run all tests)*
+ctest --test-dir /Users/danolner/Code/claude/wildboids/build --output-on-failure 2>&1 | tail -30
+```
+
+> **Tool result:**         Start 169: Sim config uses WorldConfig defaults for missing fields 169/179 Test #169: Sim config uses WorldConfig defaults for missing fields ..............   Passed    0.04 sec         Start ...
+
+
+## Assistant
+
+One failure — the sim config test. This is because I changed how the food section is parsed (it now builds `UniformFoodConfig` and syncs to flat fields, but the test checks the old flat fields). Let me check.
+
+
+## Assistant
+
+```bash *(Run failing sim config test)*
+cd /Users/danolner/Code/claude/wildboids/build && ./wildboids_tests "Load sim_config.json" 2>&1 | tail -20
+```
+
+> **Tool result:** ------------------------------------------------------------------------------- Load sim_config.json ------------------------------------------------------------------------------- /Users/danolner/Cod...
+
+
+## Assistant
+
+These failures are because you changed `angularDrag` to 1.75 and `ticksPerGeneration` to 6000 in `sim_config.json`. The test was checking the old values. Let me update the test to match your current config.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/tests/test_sim_config.cpp`]*
+
+> **Tool result:**      1→#include <catch2/catch_test_macros.hpp>      2→#include <catch2/matchers/catch_matchers_floating_point.hpp>      3→#include "io/sim_config.h"      4→#include <filesystem>      5→#include <fstre...
+
+
+## Assistant
+
+Same issue as the `max_thrust` test — hardcoded values that break when you tweak the config. I'll make this test validate structure rather than specific values, and only check things that are truly stable.
+
+
+## Assistant
+
+*[Write: `/Users/danolner/Code/claude/wildboids/tests/test_sim_config.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/tests/test_sim_config.cpp has been overwritten successfully.
+
+
+## Assistant
+
+```bash *(Rebuild after test fixes)*
+cmake --build /Users/danolner/Code/claude/wildboids/build 2>&1 | tail -10
+```
+
+> **Tool result:** [1/2] Building CXX object CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o [2/2] Linking CXX executable wildboids_tests
+
+
+## Assistant
+
+```bash *(Run all tests)*
+ctest --test-dir /Users/danolner/Code/claude/wildboids/build --output-on-failure 2>&1 | tail -15
+```
+
+> **Tool result:** 177/182 Test #177: PatchFoodSource: food is clustered ...................................   Passed    0.04 sec         Start 178: PatchFoodSource: new patch spawns when one is depleted 178/182 Test #1...
+
+
+## Assistant
+
+All 182 tests pass. Now build Release too.
+
+
+## Assistant
+
+```bash *(Build Release)*
+cmake --build /Users/danolner/Code/claude/wildboids/build-release 2>&1 | tail -10
+```
+
+> **Tool result:** [13/23] Building CXX object CMakeFiles/wildboids_tests.dir/tests/test_sim_config.cpp.o [14/23] Building CXX object CMakeFiles/wildboids.dir/src/display/renderer.cpp.o [15/23] Building CXX object CMake...
+
+
+## Assistant
+
+*[Todo update:]*
+  - [completed] Create food_source.h with config structs, source classes, variant aliases
+  - [completed] Create food_source.cpp with UniformFoodSource and PatchFoodSource implementations
+  - [completed] Update world.h — add FoodSourceConfig to WorldConfig, FoodSource + pre_seed_food to World
+  - [completed] Update world.cpp — constructor syncs flat fields, spawn_food delegates via std::visit
+  - [completed] Update sim_config.cpp to parse food mode
+  - [completed] Update headless_main.cpp — replace manual pre-seed with world.pre_seed_food(rng)
+  - [completed] Create test_food_source.cpp
+  - [completed] Update CMakeLists.txt
+  - [completed] Build and run all tests
+
+> **Tool result:** Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable
+
+
+## Assistant
+
+All done. 182/182 tests pass, Debug and Release both built. Here's the summary:
+
+**New files:**
+- [food_source.h](src/simulation/food_source.h) — `UniformFoodConfig`, `PatchFoodConfig`, `UniformFoodSource`, `PatchFoodSource` as a `std::variant`
+- [food_source.cpp](src/simulation/food_source.cpp) — Both implementations. Patch mode spawns food via `normal_distribution` around random centers; new patch appears when total food drops by `food_per_patch`.
+- [test_food_source.cpp](tests/test_food_source.cpp) — 9 new tests covering both modes + backward compat
+
+**Modified:**
+- [world.h](src/simulation/world.h) / [world.cpp](src/simulation/world.cpp) — `World` now owns a `FoodSource` variant, delegates `spawn_food()` via `std::visit`, has `pre_seed_food()`. Constructor syncs flat config fields for backward compat.
+- [sim_config.cpp](src/io/sim_config.cpp) — Parses `"mode"` key: `"uniform"` (default) or `"patches"`
+- [headless_main.cpp](src/headless_main.cpp) — Pre-seeding now uses `world.pre_seed_food(rng)`
+- [test_sim_config.cpp](tests/test_sim_config.cpp) — Made resilient to config value tweaks + added food mode parsing tests
+
+**To use patches**, change your `sim_config.json` food section to:
+```json
+"food": {
+    "mode": "patches",
+    "numPatches": 2,
+    "foodPerPatch": 30,
+    "patchRadius": 50.0,
+    "eatRadius": 10.0,
+    "energy": 15.0
+}
+```
+
+
+## Human (159)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+Ace. Please add a full summary of what you've done for this food stage to the end of the @step_by_step_planner.md in the log.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/step_by_step_planner.md`]*
+
+> **Tool result:**   1300→---   1301→   1302→## Build log   1303→   1304→### Phase 0 — completed [16.2.26]   1305→   1306→All of Steps 0.1–0.6 implemented in one pass. 28 tests, all passing.   1307→   1308→**Decisions r...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/step_by_step_planner.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/step_by_step_planner.md has been updated successfully.
+
+
+## Assistant
+
+Done — added the full Step 5.7 summary to the end of the build log in [step_by_step_planner.md](step_by_step_planner.md), covering both the shared sim config (5.7a) and food source abstraction (5.7b), with config format examples and updated progress table showing 182 tests.
+
+
+## Human (160)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+What does the "eatRadius" setting do in the food json?
+
+
+## Assistant
+
+It's the distance (in world units) within which a boid "eats" a food item. If a boid's position is within `eatRadius` of a food item's position, the food is consumed — removed from the world and its energy added to the boid. Currently set to 10.0.
+
+Smaller = boids need to pass closer to food to eat it (rewards precision). Larger = easier to grab food while passing nearby (more forgiving).
+
+
+## Human (161)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+Clustered food is producing some higher fitness numbers, but they peak at gen 8 and then another 92 generations don't produce any further improvements. This is a prelude to beginning to think through how we analyse/monitor progress, but any thoughts on what might be going on here? I feel like we want better search of evolutionary space before attempting to add predators.
+
+
+## Assistant
+
+A few likely causes for early plateauing:
+
+**1. Speciation collapse.** Check the `species_count` column in your CSV. If it drops to 1-2 species early on, you've lost diversity — the whole population converges on one strategy and can't escape local optima. NEAT's speciation is supposed to prevent this, but with 150 boids the threshold (`compatThreshold: 3.0`) may be too tight or too loose for your topology.
+
+**2. Structural mutations are too rare.** With `addNodeProb: 0.03` and `addConnectionProb: 0.05`, most generations only tweak weights. Early on, a simple weight combination (e.g. "rear thruster always on") gets decent fitness and dominates. New topologies (hidden nodes, novel connections) appear rarely and take several generations to get tuned — by which time they're often outcompeted by the established simple strategy.
+
+**3. Stagnation threshold too generous.** `maxStagnation: 15` means a species can sit at the same fitness for 15 generations before being removed. That's a lot of wasted slots.
+
+**4. Fitness landscape is flat after the easy win.** With patches, the first improvement is "move forward and stumble into a patch." Getting from there to "detect food direction and steer toward it" requires multiple coordinated changes (hidden node + correct weights), which is a big jump in genotype space.
+
+**Things to try:**
+
+- **Increase structural mutation rates** — try `addConnectionProb: 0.15`, `addNodeProb: 0.08`. More topology exploration.
+- **Lower stagnation** — `maxStagnation: 8` to cull dead-end species faster and free slots for new ones.
+- **Raise population** — 300 boids gives more rolls of the dice per generation (doubles compute time per gen, but Release is fast).
+- **Check the CSV** — plot `species_count` and `mean_fitness` over generations. If species collapse correlates with the plateau, that's your answer.
+
+The monitoring point is a good one. For diagnosing evolution, the most useful additions would be: per-species best fitness in the CSV output, genome complexity stats (node/connection counts), and maybe a diversity metric. Want me to add richer per-generation stats to the headless output?
+
+
+## Human (162)
+
+Are we outputting a CSV at the moment? I thought we're just seeing numbers in the CLI?
+
+
+## Assistant
+
+The CSV goes to **stdout** and the progress messages go to **stderr**. In a terminal they're mixed together, but you can separate them:
+
+```bash
+# CSV to file, progress still visible in terminal
+./build-release/wildboids_headless > evolution_log.csv
+
+# Both to separate files
+./build-release/wildboids_headless > evolution_log.csv 2> progress.txt
+```
+
+The CSV has columns: `gen,best_fitness,mean_fitness,species_count,pop_size`
+
+So yes, you're already getting CSV data — it's just interleaved with the stderr messages when you run without redirection. Redirect stdout to a file and you'll have a clean CSV you can plot.
+
+
+## Human (163)
+
+It's saying there's 150 boids per run at the moment, though that doesn't mean it's not dropping to 1 or 2 at the end of a run...? Those are just the new count every run?
+
+
+## Assistant
+
+Right. `pop_size` in the CSV is the **genome population** count (NEAT), not how many boids are alive at the end of a generation. Every generation starts fresh — 150 new boids spawned into a new world, run for the tick count, then fitness is collected regardless of alive/dead status.
+
+The `species_count` column is the one to watch. That's how many NEAT species exist — if it collapses to 1, you've lost diversity. But you can't currently see how many boids **survive** each generation, which could also be informative (if everyone dies early, the fitness signal is weak).
+
+Want me to add more columns to the CSV — e.g. `alive_at_end`, `max_nodes`, `max_connections` — to help diagnose what's happening?
+
+
+## Human (164)
+
+NEAT species starts at 1 and never gets higher than that...
+
+
+## Assistant
+
+That's the problem. With only 1 species, there's no diversity protection — the whole population converges on the first decent strategy and NEAT can't explore alternatives.
+
+The issue is likely `compatThreshold: 3.0` is too high. With minimal genomes (10 inputs → 4 outputs, all similar weights), the compatibility distance between any two genomes is small, so they all land in the same species. The threshold never gets exceeded.
+
+Try lowering it significantly — `compatThreshold: 0.5` or even `0.3`. That makes NEAT much more willing to split the population into separate species based on small weight or topology differences.
+
+You can test this quickly by editing `sim_config.json` and rerunning — no rebuild needed.
+
+
+## Human (165)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+Remind me again how I can speed up the GUI view simulation?
+
+
+## Assistant
+
+The GUI runs at a fixed 120Hz timestep. To speed it up you can:
+
+- **Fewer boids**: `--boids 1` for just watching one champion
+- **Smaller world**: use a separate config with smaller dimensions (but physics won't match evolution)
+
+There's no fast-forward key yet — that would need a code change to step multiple times per frame. Want me to add one? Something like pressing **F** to toggle 2x/4x speed.
+
+
+## Human (166)
+
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Analysis:
+Let me chronologically analyze the conversation from this session:
+
+1. **User opens with context from previous session** - Summary of prior work implementing Step 5.6 (headless runner), various improvements, and the spinning boid problem.
+
+2. **User asks about shared world settings** - Points out that `headless_main.cpp` and `main.cpp` duplicate world settings like angular drag, which could cause issues when evolving in headless then viewing in GUI. Asks for options to make everything run off one source.
+
+3. **I proposed 3 options** - (1) Load sim_config.json from both, (2) Embed config in champion JSON, (3) Both. User chose option 1.
+
+4. **Implemented shared sim config (Step 5.7a)**:
+   - Created `src/io/sim_config.h` and `src/io/sim_config.cpp` - JSON loader for SimConfig struct
+   - Modified `src/headless_main.cpp` - loads from `--config` flag, CLI overrides JSON values, added `--angular-drag` and `--linear-drag` flags
+   - Modified `src/main.cpp` - loads from `--config` flag, window size from config
+   - Created `tests/test_sim_config.cpp` - 3 tests initially
+   - Modified `CMakeLists.txt`
+   - Fixed test failures: `test_boid_spec.cpp` had hardcoded max_thrust=50 (user changed to 20), `test_boid_brain.cpp` assumed asymmetric thrusters
+   - All 170 tests passed, both Debug and Release built
+
+5. **User asked about hardcoded max_thrust check** - Pointed out test_boid_spec.cpp check of 20 would break if they change simple_boid.json. I changed it to `> 0`.
+
+6. **User confirmed angular drag in sim_config.json applies everywhere** - Yes.
+
+7. **User asked about deterministic runs** - Yes, seed 42 default.
+
+8. **User asked about ticks per generation** - I explained tradeoffs of more/less time.
+
+9. **User asked about speeding up GUI** - Explained `--boids N` flag, no fast-forward key yet.
+
+10. **User asked about champion neuron count** - I described the champion_gen121.json structure (21 nodes, 7 hidden).
+
+11. **User asked about food source abstraction** - Wants clustered food patches (1-3 sites), new patch spawns when one depleted. I proposed FoodSource abstraction with variant approach.
+
+12. **Implemented food source abstraction (Step 5.7b)**:
+    - Created `src/simulation/food_source.h` - config structs, source classes, variant aliases
+    - Created `src/simulation/food_source.cpp` - UniformFoodSource and PatchFoodSource
+    - Modified `src/simulation/world.h` - added FoodSourceConfig to WorldConfig, FoodSource member, pre_seed_food()
+    - Modified `src/simulation/world.cpp` - constructor syncs flat fields, spawn_food delegates via std::visit
+    - Modified `src/io/sim_config.cpp` - parses "mode" key
+    - Modified `src/headless_main.cpp` - replaced manual pre-seed with world.pre_seed_food(rng)
+    - Created `tests/test_food_source.cpp` - 9 tests
+    - Modified `CMakeLists.txt`
+    - Fixed test_sim_config.cpp failure (user changed angularDrag to 1.75 and ticksPerGeneration to 6000)
+    - Made test_sim_config.cpp resilient to config tweaks (check `> 0` not specific values)
+    - Added food mode parsing tests
+    - All 182 tests passed, Debug and Release built
+
+13. **User asked to add summary to step_by_step_planner.md** - Added Step 5.7 build log
+
+14. **User asked about eatRadius** - Explained it's the distance for food consumption
+
+15. **User discussed evolution plateauing** - Fitness peaks early, no improvement after. I suggested speciation collapse, rare structural mutations, generous stagnation threshold, flat fitness landscape after easy win.
+
+16. **User confirmed stdout CSV vs stderr** - I explained redirection
+
+17. **User asked about pop_size column** - Clarified it's genome population, not alive boids at end
+
+18. **User reported species_count stays at 1** - I identified compatThreshold: 3.0 as too high, suggested 0.5 or 0.3
+
+19. **User asked about speeding up GUI again** - I explained options, offered to add fast-forward key
+
+Key files created/modified this session:
+- src/io/sim_config.h (created)
+- src/io/sim_config.cpp (created)
+- src/simulation/food_source.h (created)
+- src/simulation/food_source.cpp (created)
+- tests/test_sim_config.cpp (created, then rewritten)
+- tests/test_food_source.cpp (created)
+- src/simulation/world.h (modified)
+- src/simulation/world.cpp (modified)
+- src/headless_main.cpp (modified)
+- src/main.cpp (modified)
+- CMakeLists.txt (modified)
+- tests/test_boid_spec.cpp (modified)
+- tests/test_boid_brain.cpp (modified)
+- step_by_step_planner.md (modified)
+
+User's sim_config.json changes (noted via system reminders):
+- angularDrag: 0.05 → 1.75
+- ticksPerGeneration: 2400 → 6000
+
+Errors encountered:
+1. test_boid_spec.cpp: hardcoded max_thrust=50, user changed to 20 → changed to `> 0`
+2. test_boid_brain.cpp: assumed asymmetric thrusters for net forward force → removed that assertion
+3. test_sim_config.cpp: hardcoded angularDrag=0.05 and ticks=2400, user changed values → made all checks non-specific (just `> 0`)
+4. cmake --build build failed once due to working directory issue → used absolute path
+
+The last exchange was about GUI speed, where I offered to add a fast-forward key. No explicit pending task.
+
+Summary:
+1. Primary Request and Intent:
+   - **Shared sim config**: User identified that `headless_main.cpp` and `main.cpp` duplicated world settings (angular drag, world size, food params, etc.), causing potential mismatches when evolving headless then viewing champions in GUI. Requested a single source of truth via `sim_config.json`.
+   - **Food source abstraction**: User wanted clustered food patches (1-3 tightly clustered sites) where new patches only appear when one is entirely depleted, to create foraging pressure that rewards navigation over random drift. Existing uniform mode must continue to work, selectable via config.
+   - **Build log documentation**: User requested full summaries added to `step_by_step_planner.md`.
+   - **Resilient tests**: User wanted to be able to freely tweak `simple_boid.json` (maxThrust) and `sim_config.json` (angularDrag, ticks) without breaking tests.
+   - **Evolution diagnostics**: User reported fitness plateaus early (gen 8) with no further improvement over 92 more generations. Species count stuck at 1. Discussed causes and parameter tuning.
+   - **GUI speed**: User asked twice about speeding up the GUI simulation view.
+
+2. Key Technical Concepts:
+   - `std::variant` for food source strategy (value types, no inheritance) — `std::variant<UniformFoodSource, PatchFoodSource>`
+   - `std::visit` for dispatching spawn/pre_seed calls on the variant
+   - Backward compatibility pattern: `World` constructor syncs flat `WorldConfig` fields into `UniformFoodConfig` when variant is default, so existing tests need zero changes
+   - JSON config uses camelCase keys, C++ uses snake_case — translation in loader
+   - NEAT speciation: `compatThreshold` of 3.0 too high for minimal genomes, causes species collapse to 1
+   - stdout/stderr separation: CSV data to stdout, progress/summary to stderr
+   - Deterministic runs via `--seed N` (default 42)
+   - Food patch spawning: `std::normal_distribution` around random centers, threshold-based replacement (when food count drops by `food_per_patch`, spawn new patch)
+
+3. Files and Code Sections:
+
+   - **`src/io/sim_config.h`** (created)
+     - Defines `SimConfig` struct wrapping `WorldConfig` + `PopulationParams` + evolution run params
+     ```cpp
+     struct SimConfig {
+         WorldConfig world;
+         PopulationParams neat;
+         int ticks_per_generation = 2400;
+         int generations = 100;
+         int save_interval = 10;
+     };
+     SimConfig load_sim_config(const std::string& path);
+     ```
+
+   - **`src/io/sim_config.cpp`** (created)
+     - JSON parser for sim_config.json. Parses world, food (with mode: uniform/patches), energy, evolution, and NEAT sections
+     - Food parsing handles `"mode"` key: `"patches"` builds `PatchFoodConfig`, default/`"uniform"` builds `UniformFoodConfig` and syncs to flat fields
+     ```cpp
+     std::string mode = f.value("mode", std::string("uniform"));
+     if (mode == "patches") {
+         PatchFoodConfig pc;
+         pc.num_patches = f.value("numPatches", pc.num_patches);
+         // ...
+         cfg.world.food_source_config = pc;
+     } else {
+         UniformFoodConfig uc;
+         // ...
+         cfg.world.food_source_config = uc;
+         cfg.world.food_spawn_rate = uc.spawn_rate; // backward compat
+     }
+     ```
+
+   - **`src/simulation/food_source.h`** (created)
+     - Config structs, source classes, variant aliases
+     ```cpp
+     struct UniformFoodConfig { float spawn_rate=2.0f; int max_food=100; float energy=10.0f; };
+     struct PatchFoodConfig { int num_patches=2; int food_per_patch=30; float patch_radius=50.0f; float energy=10.0f; };
+     using FoodSourceConfig = std::variant<UniformFoodConfig, PatchFoodConfig>;
+     using FoodSource = std::variant<UniformFoodSource, PatchFoodSource>;
+     FoodSource make_food_source(const FoodSourceConfig& config, float world_w, float world_h);
+     ```
+
+   - **`src/simulation/food_source.cpp`** (created)
+     - `UniformFoodSource`: matches previous `World::spawn_food()` behavior exactly. `pre_seed` spawns `max_food/2`.
+     - `PatchFoodSource`: spawns food via `std::normal_distribution` around random centers. `spawn()` checks if `food.size() + food_per_patch <= target`, spawns new patch if so. No per-item tracking needed.
+     - Factory: `make_food_source()` uses `std::visit` to construct the right type.
+
+   - **`src/simulation/world.h`** (modified)
+     - Added `FoodSourceConfig food_source_config` to `WorldConfig` (default: `UniformFoodConfig{}`)
+     - Added `FoodSource food_source_` member to `World`
+     - Added `void pre_seed_food(std::mt19937& rng)` public method
+     - Kept flat food fields (`food_spawn_rate`, `food_max`, etc.) for backward compat
+
+   - **`src/simulation/world.cpp`** (modified)
+     - Constructor syncs flat fields into `UniformFoodConfig` when variant is default:
+     ```cpp
+     if (auto* uc = std::get_if<UniformFoodConfig>(&config_.food_source_config)) {
+         uc->spawn_rate = config_.food_spawn_rate;
+         uc->max_food = config_.food_max;
+         uc->energy = config_.food_energy;
+     }
+     food_source_ = make_food_source(config_.food_source_config, config_.width, config_.height);
+     ```
+     - `spawn_food()` delegates via `std::visit`
+     - `pre_seed_food()` delegates via `std::visit`
+
+   - **`src/headless_main.cpp`** (modified significantly)
+     - Now loads from `--config` flag (default: `data/sim_config.json`) via `load_sim_config()`
+     - CLI flags tracked with `cli_*` bools, applied as overrides after config load
+     - Added `--angular-drag` and `--linear-drag` flags
+     - Replaced manual food pre-seed loop with `world.pre_seed_food(rng)`
+     - Uses `sim.world`, `sim.neat`, `sim.ticks_per_generation` etc. from loaded config
+     - Config summary stderr output includes drag values
+
+   - **`src/main.cpp`** (modified)
+     - Now loads from `--config` flag via `load_sim_config()`
+     - Added `--config PATH` CLI flag
+     - Window size derived from `sim.world.width`/`sim.world.height`
+     - World created with `sim.world` config
+
+   - **`tests/test_sim_config.cpp`** (created, then rewritten)
+     - Initially had hardcoded value checks that broke when user tweaked config
+     - Rewritten to check structural validity (`> 0`) rather than specific values
+     - Added 3 food mode parsing tests (uniform, patches, default-to-uniform)
+
+   - **`tests/test_food_source.cpp`** (created)
+     - 9 tests: uniform pre_seed count, uniform max respect, patch pre_seed count, patch clustering, patch respawn on depletion, no over-spawn, partial depletion doesn't trigger, world integration with patches, backward compat with flat fields
+
+   - **`tests/test_boid_spec.cpp`** (modified)
+     - Changed `CHECK_THAT(spec.thrusters[0].max_thrust, WithinAbs(50.0f, ...))` → then to `WithinAbs(20.0f, ...)` → finally to `CHECK(spec.thrusters[0].max_thrust > 0)` so user can freely change maxThrust
+
+   - **`tests/test_boid_brain.cpp`** (modified)
+     - Removed velocity assertion that assumed asymmetric thrusters (rear=50 vs front=15), since user equalized all to 20
+
+   - **`step_by_step_planner.md`** (modified)
+     - Added Step 5.7 build log covering both shared sim config (5.7a) and food source abstraction (5.7b)
+     - Updated phase 5 progress table to show 182 total tests
+
+   - **`data/sim_config.json`** (user-modified during session)
+     - `angularDrag`: changed from 0.05 to 1.75
+     - `ticksPerGeneration`: changed from 2400 to 6000
+
+   - **`CMakeLists.txt`** (modified)
+     - Added `src/simulation/food_source.cpp` and `src/io/sim_config.cpp` to `wildboids_sim` library
+     - Added `tests/test_sim_config.cpp` and `tests/test_food_source.cpp` to test executable
+
+4. Errors and fixes:
+   - **test_boid_spec.cpp hardcoded max_thrust=50**: User had changed simple_boid.json to 20 for all thrusters in previous session. Changed check to `WithinAbs(20.0f, ...)`, then user pointed out this would break again if they changed it. Changed to `CHECK(spec.thrusters[0].max_thrust > 0)`.
+   - **test_boid_brain.cpp assumed asymmetric thrusters**: Test checked `b.body.velocity.length() > 0` after stepping, but with equal thrusters at sigmoid(0)=0.5, forces cancel. Removed the velocity assertion, kept the thruster power check.
+   - **test_sim_config.cpp hardcoded config values**: Initial test checked `angularDrag == 0.05f` and `ticks == 2400`, but user changed these in sim_config.json. Rewrote entire test to check structural validity (`> 0`) instead of specific values.
+   - **cmake --build build path issue**: One build command failed because of working directory. Fixed by using absolute path `/Users/danolner/Code/claude/wildboids/build`.
+
+5. Problem Solving:
+   - **Config divergence between GUI and headless**: Solved by creating shared `load_sim_config()` used by both executables
+   - **Food spawning strategy flexibility**: Solved with `std::variant`-based food source abstraction, switchable via `sim_config.json` "mode" key
+   - **Test brittleness**: Made tests resilient to config/spec tweaks by checking structural validity rather than specific values
+   - **Evolution plateauing at gen 8**: Diagnosed as speciation collapse (species_count stuck at 1). `compatThreshold: 3.0` too high for minimal genomes. Suggested lowering to 0.3-0.5. Also suggested increasing structural mutation rates and lowering stagnation threshold.
+   - **Spinning boid exploit** (from previous session context): User addressed by equalizing thruster maxThrust to 20 and increasing angularDrag to 1.75
+
+6. All user messages:
+   - "Examine @src/main.cpp and @src/headless_main.cpp. Those are duplicating world settings like angular drag aren't they? That could be an issue e.g. if we evolve a champion in headless with one setting then run in GUI with another. What are good options to make sure everything runs off one source of world settings?"
+   - "Yes please implement option 1, making sure the @data/sim_config.json has all the correct settings so that both headless and GUI function correctly."
+   - "Just checking, in @tests/test_boid_spec.cpp is the max_thrust check of 20 hard coded? So if I change in @data/simple_boid.json that breaks things?"
+   - "Yes please. I want to be able to control max_thrust for the initial boids in @data/simple_boid.json only."
+   - "And I can change angular drag in @data/sim_config.json and that will apply across all instances now?"
+   - "If I re-run headless, is the run deterministic i.e. is the random seed the same each time (assuming everything else equal)?"
+   - "Ticks per generation is currently set to 2400. Are there arguments for giving them more time per generation?"
+   - "When loading a champion into the GUI, what are my options for speeding the sim up now? Lowering the number of instantiated boids? Can I do that via CLI?"
+   - "how many neurons are in @data/champions/champion_gen121.json ?"
+   - "I want to experiment with a different food layout option, slightly more faff to set up. Do we need to do any prep to loosely decouple how random food is generated? What I want to aim for: n number (1 to 3) of tightly clustered food sites, with new food sites only appearing when one is entirely gone (so need to keep track of each). The intuition: different evolutionary foraging patterns will emerge, and simple 'carry on moving foward' by itself won't suffice."
+   - "Yes please, then run tests to check." (approving food source implementation plan)
+   - "Ace. Please add a full summary of what you've done for this food stage to the end of the @step_by_step_planner.md in the log."
+   - "What does the 'eatRadius' setting do in the food json?"
+   - "Clustered food is producing some higher fitness numbers, but they peak at gen 8 and then another 92 generations don't produce any further improvements. This is a prelude to beginning to think through how we analyse/monitor progress, but any thoughts on what might be going on here? I feel like we want better search of evolutionary space before attempting to add predators."
+   - "Are we outputting a CSV at the moment? I thought we're just seeing numbers in the CLI?"
+   - "It's saying there's 150 boids per run at the moment, though that doesn't mean it's not dropping to 1 or 2 at the end of a run...? Those are just the new count every run?"
+   - "NEAT species starts at 1 and never gets higher than that..."
+   - "Remind me again how I can speed up the GUI view simulation?"
+
+7. Pending Tasks:
+   - No explicitly requested pending tasks. The last exchange about GUI speed resulted in me offering to add a fast-forward key (pressing F for 2x/4x speed), but the user hasn't responded yet.
+   - The broader ongoing concern is evolution quality — species collapse (compatThreshold too high), fitness plateauing, and the user wanting "better search of evolutionary space before attempting to add predators."
+   - User mentioned wanting to "think through how we analyse/monitor progress" — I offered to add richer per-generation stats (`alive_at_end`, `max_nodes`, `max_connections`) but user hasn't explicitly requested this yet.
+
+8. Current Work:
+   The most recent exchange was about GUI simulation speed. User asked "Remind me again how I can speed up the GUI view simulation?" and I explained the current options (`--boids N`, smaller world via config) and offered to add a fast-forward key. The user has not yet responded to this offer.
+
+   The broader context is the user experimenting with evolution parameters (lowered compatThreshold, increased angularDrag to 1.75, increased ticks to 6000, trying patch food mode) to improve evolutionary search before adding predators.
+
+9. Optional Next Step:
+   The user's most recent message was "Remind me again how I can speed up the GUI view simulation?" and I offered to add a fast-forward key. If the user accepts, the next step would be adding a speed multiplier to `src/display/app.cpp` (e.g. pressing F to cycle through 1x/2x/4x, stepping multiple times per rendered frame). However, the user hasn't confirmed this yet, so no action should be taken without their response.
+
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/danolner/.claude/projects/-Users-danolner-Code-claude-wildboids/9af79c84-63be-44af-b06a-63d94e564b83.jsonl
+
+
+## Human (167)
+
+<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>
+
+
+## Human (168)
+
+<command-name>/compact</command-name>
+            <command-message>compact</command-message>
+            <command-args></command-args>
+
+
+## Human (169)
+
+<local-command-stdout>Compacted </local-command-stdout>
+
+
+## Human (170)
+
+I was just asking before the compact about speeding up the GUI view. You suggested a toggle to go between 2x and 4x - can you please check through code to see what this would entail before we try to implement? It's basically allowing the sim to run a few steps before plotting...
+
+
+## Assistant
+
+Let me check the relevant display code to understand the current rendering loop.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:**      1→#include "display/app.h"      2→#include <SDL3/SDL.h>      3→#include <algorithm>      4→      5→App::App(World& world, Renderer& renderer, std::mt19937& rng)      6→    : world_(world), render...
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/display/app.h`]*
+
+> **Tool result:**      1→#pragma once      2→      3→#include "simulation/world.h"      4→#include "display/renderer.h"      5→#include <random>      6→      7→class App {      8→public:      9→    App(World& world, Re...
+
+
+## Assistant
+
+Here's what's involved:
+
+**Current setup** ([app.cpp:9](src/display/app.cpp#L9)): The sim runs at a fixed 120 Hz timestep. Each frame, the accumulator catches up with real time by stepping at `dt = 1/120`. The renderer draws once per frame after all sim steps for that frame complete.
+
+**What a speed multiplier would do**: Multiply the `frame_time` added to the accumulator by a speed factor (e.g. 2x, 4x). This means 2-4x more `world_.step()` calls per rendered frame. The physics stays stable (same `dt` per step), you just simulate more time per visual frame.
+
+**Changes needed**:
+- **[app.h](src/display/app.h)**: Add `int speed_multiplier_ = 1;` member
+- **[app.cpp](src/display/app.cpp)** `handle_events()`: Add `SDL_SCANCODE_F` to cycle through 1x → 2x → 4x → 1x
+- **[app.cpp](src/display/app.cpp)** `run()`: Change line 25 from `accumulator += frame_time` to `accumulator += frame_time * speed_multiplier_`
+
+That's essentially it — three small changes, no architectural work needed. The fixed-timestep accumulator pattern already handles this naturally. The frame_time cap on line 20 (`0.1`) would still apply to real wall-clock time, so even at 4x you won't get a death spiral.
+
+Want me to go ahead and implement it?
+
+
+## Human (171)
+
+Yes please, though add one more level, 8x and then cycle back to the original timestep.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/display/app.h`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/display/app.h has been updated successfully.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/display/app.cpp has been updated successfully.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/display/app.cpp has been updated successfully.
+
+
+## Assistant
+
+Now let me build to verify.
+
+
+## Assistant
+
+```bash *(Build project)*
+cmake --build /Users/danolner/Code/claude/wildboids/build 2>&1 | tail -5
+```
+
+> **Tool result:** [1/3] Building CXX object CMakeFiles/wildboids.dir/src/display/app.cpp.o [2/3] Building CXX object CMakeFiles/wildboids.dir/src/main.cpp.o [3/3] Linking CXX executable wildboids
+
+
+## Assistant
+
+Builds clean. Press **F** to cycle through 1x → 2x → 4x → 8x → 1x. The physics timestep stays the same — it just simulates more steps per rendered frame.
+
+
+## Human (172)
+
+F doesn't seem to be changing the viz speed?
+
+
+## Assistant
+
+Let me check how `main.cpp` sets things up — the issue might be there.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/main.cpp`]*
+
+> **Tool result:**      1→#include "brain/neat_genome.h"      2→#include "display/app.h"      3→#include "display/renderer.h"      4→#include "io/boid_spec.h"      5→#include "io/sim_config.h"      6→#include "simulatio...
+
+
+## Assistant
+
+The code looks correct. Let me check — are you running from the latest build? Let me also check if there's a frame_time cap issue at higher speeds. At 8x with the `0.1` cap, the accumulator can add at most `0.8` seconds per frame, which at `dt = 1/120` is 96 sim steps. That should be visibly faster.
+
+One possibility: did the binary get rebuilt? Let me verify the build output is in the right place.
+
+
+## Assistant
+
+```bash *(Check binary timestamp)*
+ls -la /Users/danolner/Code/claude/wildboids/build/wildboids
+```
+
+> **Tool result:** -rwxr-xr-x@ 1 danolner  staff  4575240 Feb 22 16:33 /Users/danolner/Code/claude/wildboids/build/wildboids
+
+
+## Assistant
+
+The binary is recent (16:33 today). Let me re-read the app.cpp to make sure the edit actually landed correctly.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:**      1→#include "display/app.h"      2→#include <SDL3/SDL.h>      3→#include <algorithm>      4→      5→App::App(World& world, Renderer& renderer, std::mt19937& rng)      6→    : world_(world), render...
+
+
+## Assistant
+
+Code looks correct. Let me add a stderr message when speed changes so we can confirm the keypress is being received.
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/display/app.cpp has been updated successfully.
+
+
+## Assistant
+
+That warning is expected — I'm about to use it. Let me add the log message:
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/src/display/app.cpp`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/src/display/app.cpp has been updated successfully.
+
+
+## Human (173)
+
+[Request interrupted by user]
+
+
+## Human (174)
+
+Ah sorry - we hadn't built a release. Please re-build release, then I'll re-try F.
+
+
+## Assistant
+
+```bash *(Build release)*
+cmake --build /Users/danolner/Code/claude/wildboids/build-release 2>&1 | tail -5
+```
+
+> **Tool result:** [1/3] Building CXX object CMakeFiles/wildboids.dir/src/display/app.cpp.o [2/3] Building CXX object CMakeFiles/wildboids.dir/src/main.cpp.o [3/3] Linking CXX executable wildboids
+
+
+## Assistant
+
+Release built. Try pressing F now — you should see "Speed: 2x" / "Speed: 4x" / etc. in the terminal.
+
+
+## Human (175)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/.gitignore]*
+I just accidentally added a local folder to a git commit. I've now added it to the .gitignore. How can I purge the local file from the git commit so when I try to push it doesn't go wrong? (The files are too big.
+
+
+## Assistant
+
+You need to remove the folder from Git's tracking (but keep it on disk) and amend the commit:
+
+```
+git rm -r --cached local/
+git commit --amend --no-edit
+```
+
+`--cached` means it only removes from Git's index, not your filesystem. `--amend` rewrites the last commit to exclude those files. Since you've already added `local/` to `.gitignore`, future commits won't pick it up again.
+
+Want me to run those commands for you?
+
+
+## Human (176)
+
+Yes
+
+
+## Assistant
+
+```bash *(Remove local/ from git index, keep on disk)*
+git rm -r --cached local/
+```
+
+> **Tool result:** rm 'local/videos/evolved_slower.mov' rm 'local/videos/evolved_spinning.mov' rm 'local/videos/random_weights_test.mov' rm 'local/videos/stage1_torustest.mov' rm 'local/videos/stage2_sensetest.mov'
+
+
+## Assistant
+
+```bash *(Amend last commit to exclude local/)*
+git commit --amend --no-edit
+```
+
+> **Tool result:** [master e4ad2f8] Gen 24 in this setup was managing to steer but not slow  Date: Sun Feb 22 16:44:50 2026 +0000  42 files changed, 687 insertions(+), 119 deletions(-)  create mode 100644 build-release/...
+
+
+## Assistant
+
+Done — `local/` is removed from the commit but still on disk. You're safe to push now.
+
+
+## Human (177)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+Looking at @data/champions/champion_gen5.json, how many neurons does it have?
+
+
+## Assistant
+
+14 nodes total — 10 input nodes (ids 0–9) and 4 output nodes (ids 10–13). No hidden nodes, so this is still a minimal direct-wired network with no structural mutations yet (just weight tuning from the initial fully-connected topology).
+
+
+## Human (178)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/simple_boid.json]*
+I am thinking of trying turning off boid-detects-boid sensors, just to let them evolve to detect food. Does the simple_boid.json link fully to the code to allow me to edit it directly to do that?
+
+
+## Assistant
+
+Let me check how sensors are loaded and used.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/data/simple_boid.json`]*
+
+> **Tool result:**      1→{      2→    "version": "0.2",      3→    "type": "prey",      4→    "mass": 1.0,      5→    "momentOfInertia": 0.5,      6→    "initialEnergy": 100.0,      7→    "thrusters": [      8→        ...
+
+
+## Assistant
+
+*[Grep: `sensor`]*
+
+> **Tool result:** Found 5 files src/simulation/world.cpp src/simulation/world.h src/simulation/sensory_system.cpp src/simulation/sensory_system.h src/simulation/boid.h
+
+
+## Assistant
+
+Yes, you can edit it directly. The sensors array in `simple_boid.json` is the single source of truth — the code loads whatever's there and builds the NEAT network to match (input count = number of sensors).
+
+Currently you have:
+- **Sensors 0–6**: `"filter": "any"` — detect boids and food
+- **Sensors 7–9**: `"filter": "food"` — food only
+
+To turn off boid detection, you could either:
+
+1. **Delete sensors 0–6 entirely** — reduces inputs from 10 to 3 (just the food sensors). Simpler network, faster evolution.
+2. **Change sensors 0–6 filter from `"any"` to `"food"`** — keeps the same sensor geometry but all 10 detect only food. More spatial resolution for food finding.
+
+Either way, the NEAT minimal network will be created with the right number of inputs automatically. No code changes needed.
+
+Option 2 is probably better since it gives finer-grained food detection (the narrow 36° arcs up front would be useful for homing in on food patches).
+
+
+## Human (179)
+
+Are there any CLI flags that let me choose a specific json to load a boid, or is it always simple_boid.json? (Fine if so.)
+
+
+## Assistant
+
+Looking at [headless_main.cpp](src/headless_main.cpp), there's no CLI flag for the boid spec — it's hardcoded to `data/simple_boid.json`.
+
+Same in [main.cpp](src/main.cpp) — it loads `data/simple_boid.json` unless you pass `--champion`, in which case it loads the champion file (which includes the full spec).
+
+So for now, just edit `simple_boid.json` directly. If you start wanting to switch between different sensor layouts frequently, we could add a `--spec` flag, but for experimentation editing the one file is fine.
+
+
+## Human (180)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/simple_boid.json]*
+For @champion_gen26.json, what's its neuron layout?
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/data/champions/champion_gen26.json`]*
+
+> **Tool result:**      1→{      2→    "genome": {      3→        "connections": [      4→            {      5→                "enabled": true,      6→                "innovation": 1,      7→                "source": 0,...
+
+
+## Assistant
+
+**16 nodes total**:
+- 10 input nodes (ids 0–9) — one per sensor
+- 4 output nodes (ids 10–13) — one per thruster
+- **2 hidden nodes** (ids 14, 15)
+
+The hidden nodes are:
+- **Node 14**: receives from sensor 5 (left-rear, 135° wide), feeds into outputs 10 (rear thruster) and 11 (left_rear thruster)
+- **Node 15**: receives from sensor 2 (36° right-of-center), feeds into output 11 (left_rear thruster)
+
+44 connections total (1 disabled: innovation 21, sensor 5 → output 10 — bypassed by the hidden node 14 path). So it's evolved a tiny bit of structural complexity compared to gen 5's fully minimal network, but still very simple.
+
+
+## Human (181)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+For @champion_gen6.json, what's its neuron layout?
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/data/champions/champion_gen6.json`]*
+
+> **Tool result:**      1→{      2→    "genome": {      3→        "connections": [      4→            {      5→                "enabled": true,      6→                "innovation": 1,      7→                "source": 0,...
+
+
+## Assistant
+
+**14 nodes total** — still fully minimal:
+- 10 input nodes (ids 0–9)
+- 4 output nodes (ids 10–13)
+- **0 hidden nodes**
+
+40 connections, all enabled. Pure weight-tuned direct wiring, no structural mutations yet at gen 6. Compared to gen 26 which picked up 2 hidden nodes, this one is just the starting topology with evolved weights.
+
+
+## Human (182)
+
+*[Opened file: /Users/danolner/Code/claude/wildboids/data/sim_config.json]*
+For @champion_gen45.json, what's its neuron layout?
+
+
+## Assistant
+
+```bash *(Summarize champion_gen45 neuron layout)*
+python3 -c "
+import json
+with open('/Users/danolner/Code/claude/wildboids/data/champions/champion_gen45.json') as f:
+    d = json.load(f)
+nodes = d['genome']['nodes']
+conns = d['genome']['connections']
+types = {}
+for n in nodes:
+    t = n['type']
+    types[t] = types.get(t, 0) + 1
+enabled = sum(1 for c in conns if c['enabled'])
+disabled = sum(1 for c in conns if not c['enabled'])
+hidden = [n for n in nodes if n['type'] == 'hidden']
+print(f'Nodes: {len(nodes)} total — {types.get(\"input\",0)} input, {types.get(\"output\",0)} output, {types.get(\"hidden\",0)} hidden')
+print(f'Connections: {enabled} enabled, {disabled} disabled, {len(conns)} total')
+if hidden:
+    print(f'Hidden node IDs: {[n[\"id\"] for n in hidden]}')
+"
+
+```
+
+> **Tool result:** Nodes: 18 total — 10 input, 4 output, 4 hidden Connections: 46 enabled, 3 disabled, 49 total Hidden node IDs: [14, 15, 16, 17]
+
+
+## Assistant
+
+**18 nodes total**:
+- 10 input (ids 0–9)
+- 4 output (ids 10–13)
+- **4 hidden** (ids 14, 15, 16, 17)
+
+49 connections (46 enabled, 3 disabled). So by gen 45 it's picked up 4 hidden nodes — noticeably more structural complexity than gen 26's 2 hidden nodes, suggesting NEAT is actually adding topology over time even if fitness plateaus.
+
+
+## Human (183)
+
+Yes that's with addNodeProb whacked up to 0.1 from 0.03.
+
+
+## Assistant
+
+Makes sense — 3x higher node addition rate is giving NEAT more structural material to work with. The question is whether those extra hidden nodes are actually improving fitness or just accumulating as neutral complexity. Worth comparing the fitness of gen 45 vs gen 6 (pure weights, no hidden nodes) to see if the topology is earning its keep.
+
+
+## Human (184)
+
+Hmm. It occurs to me one way to do this is to impose a neural cost. As someone once said, "Brains are merely warm" i.e. they select for computational efficiency.
+
+
+## Assistant
+
+That's a great idea — a metabolic cost for neural complexity would create selection pressure against bloat. Brains are the most energy-expensive organs in nature for exactly this reason.
+
+Simple implementation: subtract a small per-node or per-connection cost from fitness (or drain energy per tick proportional to network size). That way extra hidden nodes only survive if they earn more food than they cost. Options:
+
+1. **Fitness penalty**: `fitness -= node_count * cost_per_node` at evaluation time. Simplest, no simulation changes.
+2. **Energy drain**: each tick, `energy -= (base_brain_cost + connections * cost_per_connection)`. More naturalistic — bigger brains literally starve faster, creating direct pressure to be efficient foragers.
+
+Option 2 is more elegant and emergent — a boid with a bloated network that doesn't improve foraging will die sooner. It also interacts nicely with food scarcity: when food is abundant, the cost matters less and complexity can grow; when food is scarce, lean brains win.
+
+Want me to implement one of these?
+
+
+## Human (185)
+
+Not yet. Please add this last discussion - on the mutation / bloat / energy cost points - to a section at the end of @evolution_neuralnet_thrusters.md
+
+
+## Assistant
+
+Let me check the current end of the file to see where to append.
+
+
+## Assistant
+
+*[Read: `/Users/danolner/Code/claude/wildboids/evolution_neuralnet_thrusters.md`]*
+
+> **Tool result:**   1440→    world.clear_food();   1441→    for (const auto& genome : population.genomes()) {   1442→        Boid boid = create_boid_from_spec(spec);   1443→        boid.body.position = {random_x(rng), ...
+
+
+## Assistant
+
+*[Edit: `/Users/danolner/Code/claude/wildboids/evolution_neuralnet_thrusters.md`]*
+
+> **Tool result:** The file /Users/danolner/Code/claude/wildboids/evolution_neuralnet_thrusters.md has been updated successfully.
+
+
+## Assistant
+
+Done — added a new section "Neural Complexity Cost: Brains Are Merely Warm" at the end of [evolution_neuralnet_thrusters.md](evolution_neuralnet_thrusters.md). It covers the observed bloat problem, the biological motivation, both implementation options (fitness penalty vs per-tick energy drain) with a recommendation for Option 2, suggested parameter values with worked examples, expected effects across generations, and how it relates to pruning mutations.

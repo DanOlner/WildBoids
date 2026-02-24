@@ -122,6 +122,14 @@
             "maxRange": 120,
             "filter": "food",
             "signalType": "nearestDistance"
+        },
+        {
+            "id": 10,
+            "centerAngleDeg": 0,
+            "arcWidthDeg": 0,
+            "maxRange": 0,
+            "filter": "speed",
+            "signalType": "nearestDistance"
         }
     ]
 }
