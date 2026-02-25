@@ -188,3 +188,5 @@
 5169	5690	1772020879745862739	wildboids_tests	27df1b729a4ebab
 5169	5690	1772020879745862739	wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
 5169	5690	1772020879745862739	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
+9	717	1772023846808453453	CMakeFiles/wildboids_headless.dir/src/headless_main.cpp.o	138e7d669fe8158b
+717	747	1772023847516699107	wildboids_headless	3c02d6d5a49b6eff

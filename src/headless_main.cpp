@@ -231,9 +231,18 @@ int main(int argc, char* argv[]) {
     int prey_n_thrusters = static_cast<int>(prey_spec.thrusters.size());
 
     // Create seed genome and prey population
+    // If the spec has an embedded genome (i.e. it's a champion file), use it as the seed
     std::mt19937 rng(static_cast<unsigned>(rng_seed));
     int next_innov = 1;
-    NeatGenome prey_seed = NeatGenome::minimal(prey_n_sensors, prey_n_thrusters, next_innov);
+    NeatGenome prey_seed;
+    if (prey_spec.genome.has_value()) {
+        prey_seed = *prey_spec.genome;
+        std::cerr << "Seeding prey population from champion genome ("
+                  << prey_seed.connections.size() << " connections, "
+                  << prey_seed.nodes.size() << " nodes)\n";
+    } else {
+        prey_seed = NeatGenome::minimal(prey_n_sensors, prey_n_thrusters, next_innov);
+    }
 
     Population prey_pop(prey_seed, sim.neat, rng);
 
@@ -259,7 +268,15 @@ int main(int argc, char* argv[]) {
         }
 
         next_innov = 1;
-        NeatGenome pred_seed = NeatGenome::minimal(pred_n_sensors, pred_n_thrusters, next_innov);
+        NeatGenome pred_seed;
+        if (predator_spec.genome.has_value()) {
+            pred_seed = *predator_spec.genome;
+            std::cerr << "Seeding predator population from champion genome ("
+                      << pred_seed.connections.size() << " connections, "
+                      << pred_seed.nodes.size() << " nodes)\n";
+        } else {
+            pred_seed = NeatGenome::minimal(pred_n_sensors, pred_n_thrusters, next_innov);
+        }
         predator_pop = std::make_unique<Population>(pred_seed, predator_neat_params, rng);
 
         std::cerr << "Co-evolution enabled: " << predator_neat_params.population_size
