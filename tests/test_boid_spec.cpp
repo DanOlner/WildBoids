@@ -30,11 +30,13 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK_THAT(spec.mass, WithinAbs(1.0f, 1e-6f));
     CHECK_THAT(spec.moment_of_inertia, WithinAbs(0.5f, 1e-6f));
     CHECK_THAT(spec.initial_energy, WithinAbs(100.0f, 1e-6f));
-    REQUIRE(spec.thrusters.size() == 4);
+    REQUIRE(spec.thrusters.size() == 6);
 
     CHECK(spec.thrusters[0].label == "rear");
     CHECK(spec.thrusters[0].max_thrust > 0);
     CHECK(spec.thrusters[3].label == "front");
+    CHECK(spec.thrusters[4].label == "strafe_left");
+    CHECK(spec.thrusters[5].label == "strafe_right");
 
     // Sensors
     REQUIRE(spec.sensors.size() == 11);
@@ -56,7 +58,7 @@ TEST_CASE("Create boid from spec", "[boid_spec]") {
     CHECK_THAT(boid.body.mass, WithinAbs(1.0f, 1e-6f));
     CHECK_THAT(boid.body.moment_of_inertia, WithinAbs(0.5f, 1e-6f));
     CHECK_THAT(boid.energy, WithinAbs(100.0f, 1e-6f));
-    REQUIRE(boid.thrusters.size() == 4);
+    REQUIRE(boid.thrusters.size() == 6);
 
     // All thrusters start at zero power
     for (const auto& t : boid.thrusters) {
@@ -118,9 +120,9 @@ TEST_CASE("Spec without genome loads with no genome", "[boid_spec]") {
 TEST_CASE("Genome round-trip: save and reload preserves genome", "[boid_spec]") {
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
 
-    // Attach a minimal genome (10 sensors → 4 thrusters)
+    // Attach a minimal genome (10 sensors → 6 thrusters)
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 6, next_innov);
     // Set some non-zero weights to verify they round-trip
     genome.connections[0].weight = 1.5f;
     genome.connections[3].weight = -0.7f;
@@ -160,7 +162,7 @@ TEST_CASE("Genome round-trip: network produces identical outputs", "[boid_spec]"
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
 
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 6, next_innov);
     genome.connections[0].weight = 2.0f;
     genome.connections[7].weight = -1.5f;
     spec.genome = genome;
@@ -173,12 +175,12 @@ TEST_CASE("Genome round-trip: network produces identical outputs", "[boid_spec]"
     NeatNetwork net_reloaded(*reloaded.genome);
 
     float inputs[10] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f};
-    float out_orig[4] = {}, out_reload[4] = {};
+    float out_orig[6] = {}, out_reload[6] = {};
 
-    net_original.activate(inputs, 10, out_orig, 4);
-    net_reloaded.activate(inputs, 10, out_reload, 4);
+    net_original.activate(inputs, 10, out_orig, 6);
+    net_reloaded.activate(inputs, 10, out_reload, 6);
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         CHECK_THAT(out_reload[i], WithinAbs(out_orig[i], 1e-5f));
     }
 

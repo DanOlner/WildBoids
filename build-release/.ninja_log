@@ -190,3 +190,8 @@
 5169	5690	1772020879745862739	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
 9	717	1772023846808453453	CMakeFiles/wildboids_headless.dir/src/headless_main.cpp.o	138e7d669fe8158b
 717	747	1772023847516699107	wildboids_headless	3c02d6d5a49b6eff
+11	748	1772048061908174409	CMakeFiles/wildboids_tests.dir/tests/test_boid_brain.cpp.o	24d8c7c2bdcc6cee
+10	784	1772048061907892035	CMakeFiles/wildboids_tests.dir/tests/test_boid_spec.cpp.o	2fd6fc3dde9517f4
+784	1200	1772048063095615944	wildboids_tests	27df1b729a4ebab
+784	1200	1772048063095615944	wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
+784	1200	1772048063095615944	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab

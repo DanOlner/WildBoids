@@ -22,19 +22,19 @@ static std::string data_path(const std::string& filename) {
 TEST_CASE("Brain-driven boid: minimal genome gives sigmoid(0) thruster power", "[boid_brain]") {
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
 
-    // Attach a minimal genome (10 sensors → 4 thrusters) with all-zero weights
+    // Attach a minimal genome (10 sensors → 6 thrusters) with all-zero weights
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(10, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 6, next_innov);
 
     Boid boid = create_boid_from_spec(spec);
     REQUIRE(boid.brain != nullptr);
 
     // Run the brain manually with zero sensor outputs
-    std::vector<float> commands(4);
-    boid.brain->activate(boid.sensor_outputs.data(), 10, commands.data(), 4);
+    std::vector<float> commands(6);
+    boid.brain->activate(boid.sensor_outputs.data(), 10, commands.data(), 6);
 
     // All-zero weights + zero inputs → sigmoid(0) = 0.5 for all outputs
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         CHECK_THAT(commands[i], WithinAbs(0.5f, 1e-4f));
     }
 }
@@ -50,7 +50,7 @@ TEST_CASE("Brain-driven boid: world step activates brain", "[boid_brain]") {
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(10, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 6, next_innov);
 
     Boid boid = create_boid_from_spec(spec);
     boid.body.position = {400, 400};
@@ -105,7 +105,7 @@ TEST_CASE("Brain responds to sensor input: boid ahead drives thruster output", "
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 6, next_innov);
 
     // Set a large weight from sensor 0 (forward) to thruster 0 (rear)
     // Sensor 0 → output node 10 (first output, maps to thruster 0)
@@ -149,7 +149,7 @@ TEST_CASE("Full pipeline: brain-driven boid accelerates forward", "[boid_brain]"
 
     BoidSpec spec = load_boid_spec(data_path("simple_boid.json"));
     int next_innov = 1;
-    NeatGenome genome = NeatGenome::minimal(10, 4, next_innov);
+    NeatGenome genome = NeatGenome::minimal(10, 6, next_innov);
 
     // Zero all weights, then give output node 10 (rear thruster) a large positive bias
     // This makes the rear thruster fire regardless of sensor input
@@ -189,7 +189,7 @@ TEST_CASE("Brain-driven boid: spec with genome creates brain automatically", "[b
 
     // With genome → brain created
     int next_innov = 1;
-    spec.genome = NeatGenome::minimal(10, 4, next_innov);
+    spec.genome = NeatGenome::minimal(10, 6, next_innov);
     Boid boid_with_brain = create_boid_from_spec(spec);
     CHECK(boid_with_brain.brain != nullptr);
 }

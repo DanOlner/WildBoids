@@ -40,6 +40,24 @@
             "directionX": 0.0,
             "directionY": -1.0,
             "maxThrust": 5.0
+        },
+        {
+            "id": 4,
+            "label": "strafe_left",
+            "positionX": 0.0,
+            "positionY": 0.0,
+            "directionX": -1.0,
+            "directionY": 0.0,
+            "maxThrust": 3.0
+        },
+        {
+            "id": 5,
+            "label": "strafe_right",
+            "positionX": 0.0,
+            "positionY": 0.0,
+            "directionX": 1.0,
+            "directionY": 0.0,
+            "maxThrust": 3.0
         }
     ],
     "sensors": [

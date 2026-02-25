@@ -9,7 +9,7 @@
     },
     "food": {
         "mode": "patches",
-        "numPatches": 4,
+        "numPatches": 10,
         "foodPerPatch": 20,
         "patchRadius": 30.0,
         "eatRadius": 10.0,
