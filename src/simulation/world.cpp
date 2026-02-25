@@ -39,6 +39,7 @@ void World::step(float dt, std::mt19937* rng) {
     run_brains();
     deduct_energy(dt);
     check_food_eating();
+    check_predation();
 
     if (rng) {
         spawn_food(dt, *rng);
@@ -125,11 +126,47 @@ void World::spawn_food(float dt, std::mt19937& rng) {
     }, food_source_);
 }
 
+void World::check_predation() {
+    float catch_radius_sq = config_.predator_catch_radius * config_.predator_catch_radius;
+
+    for (auto& predator : boids_) {
+        if (!predator.alive) continue;
+        if (predator.type != "predator") continue;
+
+        for (auto& prey : boids_) {
+            if (!prey.alive) continue;
+            if (prey.type != "prey") continue;
+
+            float dist_sq;
+            if (config_.toroidal) {
+                dist_sq = toroidal_distance_sq(
+                    predator.body.position, prey.body.position,
+                    config_.width, config_.height);
+            } else {
+                Vec2 d = prey.body.position - predator.body.position;
+                dist_sq = d.length_squared();
+            }
+
+            if (dist_sq <= catch_radius_sq) {
+                // Prey dies
+                prey.alive = false;
+                prey.energy = 0.0f;
+                for (auto& t : prey.thrusters) t.power = 0.0f;
+
+                // Predator gains energy
+                predator.energy += config_.predator_catch_energy;
+                predator.total_energy_gained += config_.predator_catch_energy;
+            }
+        }
+    }
+}
+
 void World::check_food_eating() {
     float eat_radius_sq = config_.food_eat_radius * config_.food_eat_radius;
 
     for (auto& boid : boids_) {
         if (!boid.alive) continue;
+        if (boid.type == "predator") continue;  // predators don't eat food
 
         food_.erase(
             std::remove_if(food_.begin(), food_.end(),

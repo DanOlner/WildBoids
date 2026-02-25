@@ -360,6 +360,8 @@ The original didn't implement mutation, but [research suggests it's important](h
 
 ## Part 3: The Biology — Evolution of Collective Movement in Animals
 
+Via [this prompt](https://github.com/DanOlner/WildBoids/blob/master/llm_convos/2026-02-25_1100_The_user_opened_the_file_UsersdanolnerCodeclaudewi.md#human-1) (and see the group selection prompt further down).
+
 ### Deep Evolutionary Origins
 
 Collective movement is ancient. Fossils of the trilobite *Ampyx priscus* from Morocco, dating back **480 million years**, preserve strings of blind animals arranged in single-file lines, all facing the same direction and maintaining contact through their long spines. Lead researcher Jean Vannier concluded that "collective behavior is not a new evolutionary innovation that appeared a couple of million years ago" but rather "is much older, dating back to the first biodiversification events of animal life." These trilobites likely coordinated through physical contact via spines and chemical communication, despite lacking vision.
@@ -445,6 +447,66 @@ The resolution operates through **individual selection on movement rules**, not 
 ---
 
 ### Group Selection vs. Individual Selection
+
+#### The Theoretical Distinction
+
+**Individual selection** is the default Darwinian mechanism: heritable variation in traits produces differential reproductive success among individuals. Genes encoding traits that improve individual survival and reproduction increase in frequency. The logic is self-reinforcing — any mutant that improves individual fitness, even at a cost to group members, spreads because bearers outreproduce non-bearers. This creates a persistent problem for the evolution of cooperation: if altruism is heritable, non-altruists ("defectors") free-ride on altruists' contributions while paying none of the costs, and should always outcompete them within any group.
+
+**Group selection** is the hypothesis that selection can also act *between* groups as competing units. The mechanistic claim is that groups vary in heritable traits, and some groups survive and reproduce differentially because of those traits. If groups with more cooperative members consistently outperform groups of selfish individuals, between-group selection can in principle counteract the within-group erosion of cooperation.
+
+The key formal distinction is one of **variance partitioning**: for group selection to be effective, variance in fitness-relevant traits must be concentrated *between* groups (groups must reliably differ from each other), not merely *within* them. A further practical constraint is temporal: within-group selection (fast, happening every generation) must be overcome by between-group selection (slower, requiring groups to compete as units over longer timescales).
+
+- [Group Selection — Wikipedia](https://en.wikipedia.org/wiki/Group_selection)
+- [Altruism and Group Selection — Internet Encyclopedia of Philosophy](https://iep.utm.edu/altruism-and-group-selection/)
+
+#### Historical Arc
+
+**Darwin's ambiguity.** Darwin himself recognized a version of this problem. In *On the Origin of Species* (1859) he puzzled over the sterile castes of social insects — worker bees that sacrifice reproduction entirely. He suggested "selection may be applied to the family, as well as to the individual," leaving the door open to family- or group-level reasoning without specifying the mechanism.
+
+- [Darwin's One Special Difficulty](https://pmc.ncbi.nlm.nih.gov/articles/PMC2665839/). *PMC*.
+
+**Wynne-Edwards (1962): group selection as orthodoxy.** In *Animal Dispersion in Relation to Social Behaviour*, V. C. Wynne-Edwards argued that many animal behaviors function to regulate population density for the good of the group. Animals assess local population density via "epideictic displays" — communal gatherings conveying census information — and voluntarily restrain their own breeding when the group is at risk of overshooting food supply. Since any individual that ignored the signal and bred normally would outcompete restrainers, Wynne-Edwards argued this required group selection.
+
+- [V. C. Wynne-Edwards — Wikipedia](https://en.wikipedia.org/wiki/V._C._Wynne-Edwards)
+
+**Williams (1966): the gene-centred critique.** George C. Williams' *Adaptation and Natural Selection* delivered the standard refutation, establishing a methodological norm: invoke the lowest level of organization sufficient to explain any observed adaptation. His key arguments: (1) genes satisfy the requirements for a unit of selection (high heritability, fidelity of transmission, persistence across generations) while groups do not; (2) virtually every behavior attributed to group selection could be reinterpreted as individually adaptive; (3) parsimony — invoking group selection is unnecessary unless individual-level explanations genuinely fail. Williams' book, later popularized by Dawkins' *The Selfish Gene* (1976), shifted the field firmly toward gene- and individual-level explanations.
+
+- [Adaptation and Natural Selection — Wikipedia](https://en.wikipedia.org/wiki/Adaptation_and_Natural_Selection)
+
+#### Kin Selection and Inclusive Fitness: Hamilton's Resolution
+
+While Williams was dismantling naive group selection, W. D. Hamilton (1963–1964) provided a different resolution — one operating at the level of the gene but producing outcomes superficially resembling group benefit.
+
+The key insight: an individual shares genes with relatives. If a gene causes its bearer to perform a costly act that benefits a relative, the gene may still increase in frequency if enough copies of itself in relatives are thereby preserved. Hamilton formalized this as **Hamilton's rule: rb - c > 0**, where **r** is the coefficient of relatedness, **b** is the fitness benefit to the recipient, and **c** is the fitness cost to the actor.
+
+**Inclusive fitness** is the accounting framework: instead of measuring only direct offspring, we count the total transmission of an individual's genes, including copies transmitted *via* relatives whose reproduction the individual has helped. The term "kin selection" (coined by Maynard Smith) describes the *process* — selection operates through differential survival of kin groups — but the unit being selected is still the gene, requiring no special group-level inheritance mechanism.
+
+- [Hamilton's Rule and the Causes of Social Evolution](https://pmc.ncbi.nlm.nih.gov/articles/PMC3982664/). *PMC*.
+- [Kin Selection — Wikipedia](https://en.wikipedia.org/wiki/Kin_selection)
+- [Inclusive Fitness — Wikipedia](https://en.wikipedia.org/wiki/Inclusive_fitness)
+
+#### Multilevel Selection: The Price Equation Framework
+
+The apparent opposition was significantly reframed by George Price's mathematical work (early 1970s) and later by David Sloan Wilson and Elliott Sober's **multilevel selection (MLS) theory**.
+
+The **Price equation** decomposes the total change in any trait frequency into two additive components:
+- **Within-group selection**: the covariance between trait value and fitness *within* each group (typically negative for altruism — altruists lose out inside their group)
+- **Between-group selection**: the covariance between group-average trait value and group-average fitness (positive for altruism if cooperative groups outperform selfish ones)
+
+Altruism evolves when the positive between-group covariance outweighs the negative within-group covariance. Crucially, **this decomposition is mathematically equivalent to Hamilton's rule** when appropriate quantities are related. Relatedness (r) corresponds to the statistical association between actor and recipient genotypes — which arises from shared descent but can also arise from population structure or any mechanism that concentrates similar phenotypes in the same groups.
+
+This equivalence underpins the modern synthesis position: kin selection and multilevel selection are **not competing empirical theories** but **alternative mathematical framings** of the same underlying process. The debate is partly about causal interpretation — which framing better captures the biological mechanism in a given case.
+
+- [Price Equation — Wikipedia](https://en.wikipedia.org/wiki/Price_equation)
+- [The Price Equation and Unity of Social Evolution Theory](https://pmc.ncbi.nlm.nih.gov/articles/PMC7133503/). *PMC*.
+- [The Mathematics of Kindness (Price equation explainer)](https://plus.maths.org/content/mathematics-kindness). *Plus Maths*.
+
+The controversy was reignited by Nowak, Tarnita, and E. O. Wilson's 2010 *Nature* paper, which argued that inclusive fitness theory has limited generality and that multilevel selection deserves rehabilitation — provoking a response from over 130 biologists defending inclusive fitness. This debate remains active, though most researchers treat the frameworks as complementary lenses.
+
+- [The Evolution of Eusociality (Nowak, Tarnita, Wilson 2010)](https://www.nature.com/articles/nature09205). *Nature*.
+- [Kin Selection, Group Selection: A Controversy Without End?](https://blog.oup.com/2015/01/kin-group-selection-controversy/). *OUP Blog*.
+
+#### Application to Flocking and Herding
 
 **The individual-selection view:** George Williams (1966) argued that "a fleet herd of deer" is really just "a herd of fleet deer" — apparent group-level adaptations are better explained as individual adaptations expressed in a social context. For flocking, each individual benefits from aggregation (dilution, confusion, information, energy savings), so no group-level selection is needed.
 
@@ -567,3 +629,16 @@ Several key takeaways for Wild Boids:
 - [Kotrschal et al. (2023) — Evolution of schooling drives neuroanatomy changes in guppies](https://www.nature.com/articles/s41467-023-41635-6)
 - [Heathcote et al. (2023) — Genomic architecture of schooling in guppies](https://www.nature.com/articles/s41559-023-02249-9)
 - [Davidson et al. (2023) — Multi-scale review of collective behaviour dynamics](https://pmc.ncbi.nlm.nih.gov/articles/PMC9939272/)
+- [Group Selection — Wikipedia](https://en.wikipedia.org/wiki/Group_selection)
+- [Altruism and Group Selection — Internet Encyclopedia of Philosophy](https://iep.utm.edu/altruism-and-group-selection/)
+- [Darwin's One Special Difficulty — PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC2665839/)
+- [V. C. Wynne-Edwards — Wikipedia](https://en.wikipedia.org/wiki/V._C._Wynne-Edwards)
+- [Adaptation and Natural Selection — Wikipedia](https://en.wikipedia.org/wiki/Adaptation_and_Natural_Selection)
+- [Hamilton's Rule and Causes of Social Evolution — PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC3982664/)
+- [Kin Selection — Wikipedia](https://en.wikipedia.org/wiki/Kin_selection)
+- [Inclusive Fitness — Wikipedia](https://en.wikipedia.org/wiki/Inclusive_fitness)
+- [Price Equation — Wikipedia](https://en.wikipedia.org/wiki/Price_equation)
+- [The Price Equation and Unity of Social Evolution Theory — PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC7133503/)
+- [The Mathematics of Kindness — Plus Maths](https://plus.maths.org/content/mathematics-kindness)
+- [Nowak, Tarnita, Wilson (2010) — The Evolution of Eusociality](https://www.nature.com/articles/nature09205)
+- [Kin Selection, Group Selection: A Controversy Without End? — OUP Blog](https://blog.oup.com/2015/01/kin-group-selection-controversy/)

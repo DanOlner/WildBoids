@@ -497,3 +497,65 @@ Patches:
 | 5.7 | Shared config + food source abstraction | Done | 15 |
 
 Total tests: 182.
+
+---
+
+### Phase 5b: Predator co-evolution (201 tests)
+
+Added predator boids that catch and eat prey, with dual-population NEAT co-evolution. Predators and prey evolve in the same world simultaneously — predators are selected for catching prey, prey are selected for food foraging (and implicitly for evading predators).
+
+**Step 5b.1: Predator spec + predation mechanics + dual evolution**
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `data/simple_predator.json` | Predator boid spec: same 4 thrusters as prey, 7 `any` sensors + 3 `prey` sensors (replacing food sensors) + 1 speed sensor |
+| `tests/test_predation.cpp` | 9 tests: catch within/outside radius, dead prey/predator, toroidal catch, predators don't eat food, prey don't catch prey, multi-catch, fitness tracking |
+| `tests/test_dual_evolution.cpp` | 4 tests: dual fitness vector sizes, predators catch prey in simulation, two Population instances coexist, predator champion produces valid network |
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/world.h` | Added `predator_catch_radius` and `predator_catch_energy` to `WorldConfig`; added `check_predation()` private method |
+| `src/simulation/world.cpp` | Implemented `check_predation()` (predator within catch_radius kills prey, gains energy); modified `check_food_eating()` to skip predator boids; added `check_predation()` call in `step()` pipeline |
+| `src/io/sim_config.cpp` | Parse `"predator"` section from `sim_config.json` (catchRadius, catchEnergy) |
+| `data/sim_config.json` | Added `"predator"` section with `catchRadius: 12.0` and `catchEnergy: 50.0` |
+| `src/headless_main.cpp` | Full refactor for dual-population co-evolution: `run_generation()` accepts prey + predator genomes, spawns both types (prey at indices [0,N), predators at [N,N+M)), collects fitness separately. Evolution loop manages two `Population` instances. New CLI flags: `--predator-spec`, `--predator-population`. Backward compatible: without `--predator-spec`, runs prey-only as before. CSV output extended for co-evolution mode. Separate champion saving for predators. |
+| `src/main.cpp` | Added `--prey-champion`, `--predator-champion`, `--predators N` CLI flags. Spawns predator boids alongside prey. `--champion` kept as alias for `--prey-champion`. |
+| `CMakeLists.txt` | Added `test_predation.cpp` and `test_dual_evolution.cpp` to test target |
+
+**Architecture decisions:**
+
+- **Option A (flat boids vector):** Prey and predators share a single `boids_` vector in World. Prey are spawned at indices [0, prey_count), predators at [prey_count, total). The spatial grid, sensor system, and physics step all operate on the flat vector unchanged. Fitness collection slices by index range.
+- **Predators don't eat food:** `check_food_eating()` skips boids with `type == "predator"`. Predator energy comes solely from catching prey.
+- **Predation is O(predators × prey):** Simple brute-force distance check. No spatial grid needed for typical population sizes (30 × 150 = 4500 checks per tick).
+- **Backward compatibility:** Headless runner without `--predator-spec` runs prey-only evolution unchanged. GUI without `--predators` spawns prey only.
+- **Separate populations:** Prey and predator `Population` instances are fully independent with separate innovation trackers, species, and genomes.
+
+**Headless runner usage:**
+
+```bash
+# Prey-only (backward compatible)
+./build-release/wildboids_headless --generations 50 --save-best
+
+# Co-evolution
+./build-release/wildboids_headless --predator-spec data/simple_predator.json \
+    --predator-population 30 --generations 100 --save-best
+
+# Champions saved to data/champions/ (prey) and data/champions/predators/ (predators)
+```
+
+**GUI usage:**
+
+```bash
+# Prey + predators with random brains
+./build-release/wildboids --predators 10
+
+# With evolved champions
+./build-release/wildboids --prey-champion data/champions/champion_prey_gen50.json \
+    --predator-champion data/champions/predators/champion_predator_gen50.json
+```
+
+**201 tests, all passing** (182 previous + 9 predation + 4 dual evolution + 6 sim_config).

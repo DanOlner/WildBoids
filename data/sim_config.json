@@ -1,7 +1,7 @@
 {
     "world": {
-        "width": 2000,
-        "height": 2000,
+        "width": 600,
+        "height": 600,
         "toroidal": true,
         "linearDrag": 0.1,
         "angularDrag": 1.75,
@@ -14,6 +14,10 @@
         "patchRadius": 30.0,
         "eatRadius": 10.0,
         "energy": 15.0
+    },
+    "predator": {
+        "catchRadius": 12.0,
+        "catchEnergy": 50.0
     },
     "energy": {
         "metabolismRate": 0.1,

@@ -10,22 +10,33 @@
 
 int main(int argc, char* argv[]) {
   // Parse args
-  std::string champion_path;
+  std::string prey_champion_path;
+  std::string predator_champion_path;
   std::string config_path = "data/sim_config.json";
   int num_boids = 30;
+  int num_predators = 0;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--champion") == 0 && i + 1 < argc) {
-      champion_path = argv[++i];
+      prey_champion_path = argv[++i];
+    } else if (std::strcmp(argv[i], "--prey-champion") == 0 && i + 1 < argc) {
+      prey_champion_path = argv[++i];
+    } else if (std::strcmp(argv[i], "--predator-champion") == 0 && i + 1 < argc) {
+      predator_champion_path = argv[++i];
     } else if (std::strcmp(argv[i], "--boids") == 0 && i + 1 < argc) {
       num_boids = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--predators") == 0 && i + 1 < argc) {
+      num_predators = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
       config_path = argv[++i];
     } else if (std::strcmp(argv[i], "--help") == 0) {
       std::cerr << "Usage: " << argv[0] << " [options]\n"
-                << "  --champion PATH  Load evolved champion JSON (all boids use this brain)\n"
-                << "  --boids N        Number of boids to spawn (default: 30)\n"
-                << "  --config PATH    Sim config JSON (default: data/sim_config.json)\n"
-                << "  --help           Show this help\n";
+                << "  --champion PATH          Load evolved prey champion JSON\n"
+                << "  --prey-champion PATH     Same as --champion\n"
+                << "  --predator-champion PATH Load evolved predator champion JSON\n"
+                << "  --boids N                Number of prey boids (default: 30)\n"
+                << "  --predators N            Number of predator boids (default: 0)\n"
+                << "  --config PATH            Sim config JSON (default: data/sim_config.json)\n"
+                << "  --help                   Show this help\n";
       return 0;
     }
   }
@@ -42,22 +53,42 @@ int main(int argc, char* argv[]) {
 
   World world(sim.world);
 
-  // Load boid spec — either from champion or default
-  BoidSpec spec;
+  // Load prey boid spec — either from champion or default
+  BoidSpec prey_spec;
   try {
-    if (!champion_path.empty()) {
-      spec = load_boid_spec(champion_path);
-      std::cerr << "Loaded champion from: " << champion_path << "\n";
-      if (!spec.genome.has_value()) {
-        std::cerr << "Warning: champion file has no genome, boids will have no brain\n";
+    if (!prey_champion_path.empty()) {
+      prey_spec = load_boid_spec(prey_champion_path);
+      std::cerr << "Loaded prey champion from: " << prey_champion_path << "\n";
+      if (!prey_spec.genome.has_value()) {
+        std::cerr << "Warning: prey champion file has no genome, boids will have no brain\n";
       }
     } else {
-      spec = load_boid_spec("data/simple_boid.json");
+      prey_spec = load_boid_spec("data/simple_boid.json");
     }
   } catch (const std::exception &e) {
-    std::cerr << "Failed to load boid spec: " << e.what() << "\n";
+    std::cerr << "Failed to load prey boid spec: " << e.what() << "\n";
     std::cerr << "Make sure to run from the project root directory.\n";
     return 1;
+  }
+
+  // Load predator boid spec if predators requested
+  BoidSpec predator_spec;
+  if (num_predators > 0 || !predator_champion_path.empty()) {
+    if (num_predators == 0) num_predators = 10;  // default if champion given but count not
+    try {
+      if (!predator_champion_path.empty()) {
+        predator_spec = load_boid_spec(predator_champion_path);
+        std::cerr << "Loaded predator champion from: " << predator_champion_path << "\n";
+        if (!predator_spec.genome.has_value()) {
+          std::cerr << "Warning: predator champion file has no genome\n";
+        }
+      } else {
+        predator_spec = load_boid_spec("data/simple_predator.json");
+      }
+    } catch (const std::exception &e) {
+      std::cerr << "Failed to load predator boid spec: " << e.what() << "\n";
+      return 1;
+    }
   }
 
   std::mt19937 rng(42);
@@ -65,10 +96,11 @@ int main(int argc, char* argv[]) {
   std::uniform_real_distribution<float> pos_y(0, sim.world.height);
   std::uniform_real_distribution<float> angle_dist(0, 2.0f * 3.14159265f);
 
-  if (!champion_path.empty()) {
-    // Champion mode: all boids use the loaded genome
+  // Spawn prey boids
+  if (!prey_champion_path.empty()) {
+    // Champion mode: all prey use the loaded genome
     for (int i = 0; i < num_boids; i++) {
-      Boid boid = create_boid_from_spec(spec);
+      Boid boid = create_boid_from_spec(prey_spec);
       boid.body.position = {pos_x(rng), pos_y(rng)};
       boid.body.angle = angle_dist(rng);
       world.add_boid(std::move(boid));
@@ -76,8 +108,8 @@ int main(int argc, char* argv[]) {
   } else {
     // Default mode: random NEAT weights
     std::normal_distribution<float> weight_dist(0.0f, 1.0f);
-    int n_sensors = static_cast<int>(spec.sensors.size());
-    int n_thrusters = static_cast<int>(spec.thrusters.size());
+    int n_sensors = static_cast<int>(prey_spec.sensors.size());
+    int n_thrusters = static_cast<int>(prey_spec.thrusters.size());
 
     int next_innov = 1;
     for (int i = 0; i < num_boids; i++) {
@@ -86,13 +118,47 @@ int main(int argc, char* argv[]) {
       for (auto &c : genome.connections) {
         c.weight = weight_dist(rng);
       }
-      spec.genome = genome;
+      prey_spec.genome = genome;
 
-      Boid boid = create_boid_from_spec(spec);
+      Boid boid = create_boid_from_spec(prey_spec);
       boid.body.position = {pos_x(rng), pos_y(rng)};
       boid.body.angle = angle_dist(rng);
       world.add_boid(std::move(boid));
     }
+  }
+
+  // Spawn predator boids
+  if (num_predators > 0) {
+    if (!predator_champion_path.empty()) {
+      // Champion mode: all predators use the loaded genome
+      for (int i = 0; i < num_predators; i++) {
+        Boid boid = create_boid_from_spec(predator_spec);
+        boid.body.position = {pos_x(rng), pos_y(rng)};
+        boid.body.angle = angle_dist(rng);
+        world.add_boid(std::move(boid));
+      }
+    } else {
+      // Random NEAT weights for predators
+      std::normal_distribution<float> weight_dist(0.0f, 1.0f);
+      int n_sensors = static_cast<int>(predator_spec.sensors.size());
+      int n_thrusters = static_cast<int>(predator_spec.thrusters.size());
+
+      int next_innov = 1;
+      for (int i = 0; i < num_predators; i++) {
+        NeatGenome genome = NeatGenome::minimal(n_sensors, n_thrusters, next_innov);
+        next_innov = 1;
+        for (auto &c : genome.connections) {
+          c.weight = weight_dist(rng);
+        }
+        predator_spec.genome = genome;
+
+        Boid boid = create_boid_from_spec(predator_spec);
+        boid.body.position = {pos_x(rng), pos_y(rng)};
+        boid.body.angle = angle_dist(rng);
+        world.add_boid(std::move(boid));
+      }
+    }
+    std::cerr << "Spawned " << num_predators << " predators\n";
   }
 
   // Create window and run

@@ -52,6 +52,13 @@ SimConfig load_sim_config(const std::string& path) {
         }
     }
 
+    // Predator
+    if (j.contains("predator")) {
+        const auto& p = j["predator"];
+        cfg.world.predator_catch_radius = p.value("catchRadius", cfg.world.predator_catch_radius);
+        cfg.world.predator_catch_energy = p.value("catchEnergy", cfg.world.predator_catch_energy);
+    }
+
     // Energy
     if (j.contains("energy")) {
         const auto& e = j["energy"];

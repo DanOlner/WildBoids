@@ -35,6 +35,10 @@ struct WorldConfig {
     // Energy costs
     float metabolism_rate = 0.5f;      // energy lost per second just being alive
     float thrust_cost = 0.1f;          // energy cost per unit thrust per second
+
+    // Predation
+    float predator_catch_radius = 12.0f;  // how close predator must be to catch prey
+    float predator_catch_energy = 50.0f;  // energy gained by predator per catch
 };
 
 class World {
@@ -67,5 +71,6 @@ private:
     void run_brains();
     void spawn_food(float dt, std::mt19937& rng);
     void check_food_eating();
+    void check_predation();
     void deduct_energy(float dt);
 };

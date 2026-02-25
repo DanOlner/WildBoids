@@ -18,7 +18,9 @@ See spec.md and the planning docs listed there for full design context.
 ## How to run
 
 - GUI: `./build/wildboids [--champion data/champions/foo.json] [--boids 50] [--config data/sim_config.json]`
-- Headless evolution: `./build-release/wildboids_headless --generations 100 --save-best > log.csv`
+- GUI with predators: `./build/wildboids --prey-champion data/champions/prey.json --predator-champion data/champions/predators/pred.json --predators 10`
+- Headless prey-only: `./build-release/wildboids_headless --generations 100 --save-best > log.csv`
+- Headless co-evolution: `./build-release/wildboids_headless --predator-spec data/simple_predator.json --predator-population 30 --generations 100 --save-best`
 - Config: `data/sim_config.json` (shared between GUI and headless — ensures evolved champions replay with identical physics)
 - Without `--champion`, the GUI spawns boids with random NEAT weights
 
@@ -46,7 +48,8 @@ See spec.md and the planning docs listed there for full design context.
 - JSON (nlohmann/json) for boid specs and sim config
 - Pipeline per tick: physics → wrap → grid → sensors → brains (brain outputs take effect next tick — one-tick delay)
 - Boid is move-only (non-copyable) due to `unique_ptr<ProcessingNetwork>` brain
-- 10 sensors (7 boid-detecting + 3 food-detecting) → NEAT network → 4 thrusters
+- Prey: 11 sensors (7 boid-detecting + 3 food-detecting + 1 speed) → NEAT network → 4 thrusters
+- Predator: 11 sensors (7 boid-detecting + 3 prey-detecting + 1 speed) → NEAT network → 4 thrusters
 - Output nodes use Sigmoid → [0,1] maps directly to thruster power
 - Genome input count derived from `spec.sensors.size()`, not hardcoded
 
@@ -60,7 +63,7 @@ src/display/      — SDL3 renderer, app main loop (GUI only)
 src/main.cpp      — GUI entry point
 src/headless_main.cpp — CLI evolution runner (no SDL dependency)
 tests/            — Catch2 tests, one file per component
-data/             — simple_boid.json, sim_config.json, champions/
+data/             — simple_boid.json, simple_predator.json, sim_config.json, champions/
 planningdocs/       — active planning docs (forward_plan.md, build_log.md, evolution_neuralnet_thrusters.md, etc.)
 planningdocs/planning_archive/ — historical design docs, safe to ignore
 ```
@@ -72,20 +75,16 @@ planningdocs/planning_archive/ — historical design docs, safe to ignore
 - Drag is currently a world-level property (passed into `Boid::step()`), not per-boid.
 - Tests run from the build directory; `test_boid_spec.cpp` searches for `data/` in parent directories.
 - Food sources are a `std::variant<UniformFoodSource, PatchFoodSource>` strategy, configured via `sim_config.json` `"mode"` key.
+- Predation: predators within `catch_radius` kill prey and gain energy. Predators don't eat food. Configured via `sim_config.json` `"predator"` section.
+- Dual-population co-evolution: headless runner manages two `Population` instances (prey + predator) evolving in the same world. Prey at boid indices [0,N), predators at [N,N+M).
 
 ## Current phase
 
-Phase 5 (Evolution) in progress. 182 tests passing. Steps 5.1–5.7 complete:
-- 5.1: Innovation tracker + mutation operators
-- 5.2: Crossover (innovation-number aligned)
-- 5.3: Speciation + population management (XOR benchmark validates NEAT)
-- 5.4: Food, energy, metabolism, death, fitness tracking
-- 5.5: Evolution loop integration (headless `run_generation()` harness)
-- 5.5b: Food sensors (3 wide arcs, `EntityFilter::Food`)
-- 5.6: Headless CLI runner (`wildboids_headless`)
-- 5.7: Shared sim config + food source abstraction (uniform/patch modes)
+Phase 5b (Predator co-evolution). 201 tests passing. Steps 5.1–5.7 + 5b.1 complete:
+- 5.1–5.7: Core evolution (see build_log.md for details)
+- 5b.1: Predator spec, predation mechanics, dual-population headless runner, GUI predator support
 
-Next: generational evolution in GUI (Option B from evolution_neuralnet_thrusters.md), neural complexity cost, or predator co-evolution (Phase 5b).
+Next: Run co-evolution experiments, tune predator/prey balance (catch radius, energy, population ratios). See forward_plan.md Options A–H for other directions.
 
 See planningdocs/forward_plan.md for the build plan and planningdocs/build_log.md for the build history.
 See planningdocs/evolution_neuralnet_thrusters.md for NEAT design rationale and architecture decisions.

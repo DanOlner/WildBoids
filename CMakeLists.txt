@@ -76,6 +76,8 @@ add_executable(wildboids_tests
     tests/test_headless.cpp
     tests/test_sim_config.cpp
     tests/test_food_source.cpp
+    tests/test_predation.cpp
+    tests/test_dual_evolution.cpp
 )
 
 target_link_libraries(wildboids_tests PRIVATE wildboids_sim Catch2::Catch2WithMain)
