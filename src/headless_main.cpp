@@ -10,9 +10,14 @@
 #include <iostream>
 #include <random>
 
+struct GenerationResult {
+    std::vector<float> fitness;
+    int survivors = 0;
+};
+
 // Run one generation: create a World, spawn boids with genomes as brains,
 // run for N ticks, return fitness (total_energy_gained) for each genome.
-static std::vector<float> run_generation(
+static GenerationResult run_generation(
     const std::vector<NeatGenome>& genomes,
     const BoidSpec& base_spec,
     const WorldConfig& config,
@@ -41,16 +46,26 @@ static std::vector<float> run_generation(
     float dt = 1.0f / 120.0f;
     for (int t = 0; t < ticks; ++t) {
         world.step(dt, &rng);
+
+        // Early exit if all boids are dead
+        const auto& boids = world.get_boids();
+        bool any_alive = false;
+        for (const auto& b : boids) {
+            if (b.alive) { any_alive = true; break; }
+        }
+        if (!any_alive) break;
     }
 
-    // Collect fitness
-    std::vector<float> fitness(genomes.size());
+    // Collect fitness and count survivors
+    GenerationResult result;
+    result.fitness.resize(genomes.size());
     const auto& boids = world.get_boids();
     for (int i = 0; i < static_cast<int>(genomes.size()); ++i) {
-        fitness[i] = boids[i].total_energy_gained;
+        result.fitness[i] = boids[i].total_energy_gained;
+        if (boids[i].alive) ++result.survivors;
     }
 
-    return fitness;
+    return result;
 }
 
 static void print_usage(const char* prog) {
@@ -200,7 +215,7 @@ int main(int argc, char* argv[]) {
               << "  Drag: " << sim.world.linear_drag << "/" << sim.world.angular_drag << "\n";
 
     // Print header
-    std::cout << "gen,best_fitness,mean_fitness,species_count,pop_size\n";
+    std::cout << "gen,best_fitness,mean_fitness,species_count,pop_size,survivors\n";
 
     // Create output directory
     std::filesystem::create_directories(output_dir);
@@ -210,21 +225,22 @@ int main(int argc, char* argv[]) {
 
     // Evolution loop
     for (int gen = 0; gen < sim.generations; ++gen) {
-        auto fitness = run_generation(pop.genomes(), spec, sim.world, sim.ticks_per_generation, rng);
+        auto result = run_generation(pop.genomes(), spec, sim.world, sim.ticks_per_generation, rng);
 
         pop.evaluate([&](int idx, const NeatGenome&) {
-            return fitness[idx];
+            return result.fitness[idx];
         });
 
         float mean_fitness = 0.0f;
-        for (float f : fitness) mean_fitness += f;
-        mean_fitness /= static_cast<float>(fitness.size());
+        for (float f : result.fitness) mean_fitness += f;
+        mean_fitness /= static_cast<float>(result.fitness.size());
 
         std::cout << gen << ","
                   << pop.best_fitness() << ","
                   << mean_fitness << ","
                   << pop.species_count() << ","
-                  << pop.size() << "\n";
+                  << pop.size() << ","
+                  << result.survivors << "\n";
 
         // Track all-time best
         bool is_new_best = pop.best_fitness() > all_time_best;

@@ -358,6 +358,181 @@ The original didn't implement mutation, but [research suggests it's important](h
 
 ---
 
+## Part 3: The Biology — Evolution of Collective Movement in Animals
+
+### Deep Evolutionary Origins
+
+Collective movement is ancient. Fossils of the trilobite *Ampyx priscus* from Morocco, dating back **480 million years**, preserve strings of blind animals arranged in single-file lines, all facing the same direction and maintaining contact through their long spines. Lead researcher Jean Vannier concluded that "collective behavior is not a new evolutionary innovation that appeared a couple of million years ago" but rather "is much older, dating back to the first biodiversification events of animal life." These trilobites likely coordinated through physical contact via spines and chemical communication, despite lacking vision.
+
+- Vannier, J. et al. (2019). [Collective behaviour in 480-million-year-old trilobite arthropods from Morocco](https://www.nature.com/articles/s41598-019-51012-3). *Scientific Reports*, 9, 14941.
+
+### Why Did Collective Movement Evolve? Core Theories
+
+#### 1. Anti-Predator Benefits (the primary driver)
+
+Multiple distinct mechanisms operate:
+
+**The Selfish Herd (Hamilton, 1971):** Individuals reduce their personal predation risk by positioning themselves among conspecifics. Each animal attempts to minimize its "domain of danger" — the area of ground closer to it than to any other individual (a Voronoi tessellation). Predators preferentially attack the nearest prey, so moving toward the center of a group reduces individual risk. This produces aggregation as an emergent consequence of selfish individual behavior, not group-level cooperation.
+
+- Hamilton, W.D. (1971). [Geometry for the Selfish Herd](https://www.sciencedirect.com/science/article/abs/pii/0022519371901895). *Journal of Theoretical Biology*, 31(2), 295–311.
+
+**The Dilution Effect:** As group size increases, per-capita risk of being targeted decreases simply through dilution.
+
+**The Many-Eyes Hypothesis:** Larger groups have more individuals scanning for predators, distributing the vigilance burden and allowing each individual more feeding time.
+
+- Pulliam, H.R. (1973). On the advantages of flocking. *Journal of Theoretical Biology*, 38, 419–422.
+
+**The Confusion Effect:** Many moving targets in a group create sensory overload for predators, making it harder to single out and track individual prey. Studies on three-dimensional starling flocks have demonstrated that predator attack success decreases with increasing group size.
+
+- [Confusion effect in starling flocks](https://royalsocietypublishing.org/doi/10.1098/rsos.160564). *Royal Society Open Science*.
+
+**Empirical Integration:** Ioannou, Guttal & Couzin (2012) used live bluegill sunfish predators attacking computer-generated virtual prey to demonstrate that prey exhibiting coordinated collective motion had significantly higher survival than those moving independently — direct experimental evidence that **predators select for collective motion in prey**.
+
+- Ioannou, C.C., Guttal, V. & Couzin, I.D. (2012). [Predatory fish select for coordinated collective motion in virtual prey](https://www.science.org/doi/10.1126/science.1218919). *Science*, 337, 1212–1215.
+
+#### 2. Energy Savings
+
+Collective movement provides significant hydrodynamic and aerodynamic benefits. Fish swimming in schools use **53% less energy** than solitary fish, and recover from high-speed swimming 43% faster. At higher speeds, metabolic savings reach **56–79%**. Critically, these savings do not require fixed positional arrangements — energy benefits arise even as fish move within the school.
+
+- Marras, S. et al. (2024). [Energy conservation by collective movement in schooling fish](https://elifesciences.org/articles/90352). *eLife*, 12, RP90352.
+- [Collective movement reduces locomotion costs in turbulence](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3002501). *PLOS Biology*.
+
+#### 3. Enhanced Foraging and Information Sharing
+
+Groups find food faster than individuals. Social interactions allow animals to combine private and social information about resource locations. The optimal balance between social and individual information depends on environment structure: clustered environments favor strong social information use, while uniform environments favor individual search.
+
+- [Social interactions drive efficient foraging](https://elifesciences.org/articles/56196). *eLife*.
+- [Collective learning from individual experiences](https://royalsocietypublishing.org/doi/10.1098/rsif.2018.0803). *Royal Society Interface*.
+
+#### Self-Organization from Simple Rules
+
+A foundational insight: complex collective patterns emerge from simple individual behavioral rules. Couzin & Krause (2003) demonstrated that very different collective structures (swarms, polarized groups, rotating mills) self-organize from small adjustments to a single parameter — the radius over which individuals align with each other.
+
+- Couzin, I.D. & Krause, J. (2003). [Self-Organization and Collective Behavior in Vertebrates](https://www.semanticscholar.org/paper/Self-Organization-and-Collective-Behavior-in-Couzin-Krause/7ff4729f29ac11d0baca19878761bb1cccd7d1d6). *Advances in the Study of Behavior*, 32, 1–75.
+- Sumpter, D.J.T. (2006). [The principles of collective animal behaviour](https://pmc.ncbi.nlm.nih.gov/articles/PMC1626537/). *Philosophical Transactions of the Royal Society B*, 361, 5–22.
+
+---
+
+### The Edge Paradox: How Does Herding Get Selected For?
+
+If peripheral individuals suffer higher predation, and every individual is "trying" to get to the center, there will always be losers on the edges. So how does herding evolve?
+
+The resolution operates through **individual selection on movement rules**, not group selection:
+
+1. **Selection on rules, not positions:** What evolves is the behavioral rule "move toward your nearest neighbor when threatened." Individuals carrying genes for this rule have, *on average across their lifetime*, lower domains of danger than individuals who do not aggregate at all. Even an individual sometimes stuck on the edge of a group has lower predation risk than an isolated individual.
+
+2. **Dominance hierarchies sort positions:** More dominant, larger, or faster animals tend to secure central positions. The selfish herd does not require all individuals to benefit equally — it only requires that aggregating is better on average than not aggregating.
+
+3. **Dynamic reshuffling:** In mobile groups, positions constantly change. An individual on the edge at one moment may be central the next. The stochastic nature of position means the average fitness of "joiners" exceeds that of "loners."
+
+**Computational confirmation:** Reluga & Viscido (2005) demonstrated that natural selection of localized movement rules (considering only nearest neighbors) is sufficient to promote the evolution of selfish herd behavior.
+
+- Reluga, T.C. & Viscido, S.V. (2005). [Simulated evolution of selfish herd behavior](https://www.sciencedirect.com/science/article/abs/pii/S0022519304005715). *Journal of Theoretical Biology*, 234(2), 213–225.
+
+**Evolutionary GA model:** Wood & Ackland (2007) evolved selfish herd strategies using genetic algorithms with individual-based models under simulated predation and foraging pressure. Distinct aggregating strategies emerged, driven primarily by predator avoidance.
+
+- Wood, A.J. & Ackland, G.J. (2007). [Evolving the selfish herd](https://pmc.ncbi.nlm.nih.gov/articles/PMC2169279/). *Proceedings of the Royal Society B*, 274(1618), 1637–1642.
+
+**Empirical support:** De Vos & O'Riain (2010) manipulated domains of danger of Cape fur seal decoys and showed that sharks preferentially attacked decoys with larger domains of danger. Quinn & Cresswell (2006) showed that sparrowhawks preferentially targeted widely-spaced redshanks in flocks.
+
+- De Vos, A. & O'Riain, M.J. (2010). [Sharks shape the geometry of a selfish seal herd](https://pmc.ncbi.nlm.nih.gov/articles/PMC2817263/). *Biology Letters*, 6(4), 489–491.
+- Quinn, J.L. & Cresswell, W. (2006). [Testing domains of danger in the selfish herd](https://pmc.ncbi.nlm.nih.gov/articles/PMC1634896/). *Proceedings of the Royal Society B*, 273, 2521–2526.
+
+**A complication — "Selfish Herders Finish Last":** In mobile groups (where the group itself is moving), individuals who selfishly push toward the center can actually disrupt group coordination. Romenskyy et al. (2022) found that in mobile animal groups, selfish herding behavior produces worse outcomes than cooperative movement rules.
+
+- Romenskyy, M. et al. (2022). ['Selfish herders' finish last in mobile animal groups](https://royalsocietypublishing.org/rspb/article/289/1985/20221653/79590/Selfish-herders-finish-last-in-mobile-animal). *Proceedings of the Royal Society B*, 289, 20221653.
+
+---
+
+### Group Selection vs. Individual Selection
+
+**The individual-selection view:** George Williams (1966) argued that "a fleet herd of deer" is really just "a herd of fleet deer" — apparent group-level adaptations are better explained as individual adaptations expressed in a social context. For flocking, each individual benefits from aggregation (dilution, confusion, information, energy savings), so no group-level selection is needed.
+
+- Williams, G.C. (1966). *Adaptation and Natural Selection*. Princeton University Press.
+- [Pinker, S. (2012). The False Allure of Group Selection](https://www.edge.org/conversation/steven_pinker-the-false-allure-of-group-selection). Edge.org.
+
+**Multilevel selection theory:** David Sloan Wilson and Elliott Sober revived group selection under "multilevel selection," arguing that selection acts simultaneously at multiple levels. Wilson's summary: "Selfishness beats altruism within groups. Altruistic groups beat selfish groups. Everything else is commentary."
+
+- Wilson, D.S. & Sober, E. (1998). *Unto Others: The Evolution and Psychology of Unselfish Behavior*. Harvard University Press.
+- [Evolution for the Good of the Group](https://www.americanscientist.org/article/evolution-for-the-good-of-the-group). *American Scientist*.
+
+**Current consensus:** The majority of behavioral biologists consider individual selection (including inclusive fitness/kin selection) sufficient to explain collective movement. Group selection remains a minority position. For flocking specifically, the individual-level benefits are strong enough that group-level selection, even if it operates, is not necessary to explain the phenomenon.
+
+**Kin selection** (Hamilton's rule: rb > c) is largely **not required** to explain flocking. Groups of unrelated animals are held together by individual cost-benefit decisions, not altruistic sacrifice. Kin selection becomes relevant primarily for genuinely costly behaviors (alarm calls, sentinel behavior), not for aggregation per se — though kin structure can reinforce collective behavior when groups consist of relatives.
+
+---
+
+### Actual Genetics of Collective Behavior
+
+Recent research has identified specific genes and genetic architectures underlying collective movement:
+
+#### Zebrafish: 90 Genes Tested via CRISPR
+
+Researchers at Harvard and Max Planck tested **90 different genes** in zebrafish using CRISPR, mutating one gene at a time. Three categories of mutant collective behavior emerged: "scattered" (reduced cohesion), "coordinated" (enhanced aligned schooling), and "huddled" (dense but disordered).
+
+Two notable genes:
+- **scn1lab** (ortholog associated with Dravet syndrome/autism in humans): mutation causes dispersed swimming.
+- **disc1** (associated with schizophrenia in humans): mutation causes tight huddling.
+
+The mechanism is remarkably simple: just two basic visual responses (relative visual field occupancy and global visual motion detection) are sufficient to account for emergent group behavior. Mutations perturb these individual-level reflexes, which alter collective behavior predictably.
+
+- Tang, W. et al. (2020). [Genetic Control of Collective Behavior in Zebrafish](https://www.hsci.harvard.edu/news/genetic-control-collective-behavior-zebrafish). *iScience*, 23(3), 100942.
+- Harpaz, R. et al. (2021). [Collective behavior emerges from genetically controlled simple behavioral motifs in zebrafish](https://pmc.ncbi.nlm.nih.gov/articles/PMC8494438/). *Science Advances*, 7(42).
+
+#### Sticklebacks: The Eda Gene and Lateral Line
+
+In threespine sticklebacks, the **Eda (Ectodysplasin) gene** — the same gene responsible for differences in armor plating between marine and freshwater populations — also shapes schooling behavior. Key findings:
+- **Distinct genetic modules** control different aspects of schooling: tendency to school and body position within the school map to different genomic regions.
+- A genetic link exists between schooling position and variation in the **neurosensory lateral line** (the organ fish use to detect water pressure changes from nearby movement).
+- This suggests schooling behavior evolved in part through changes in **sensory systems**, not just behavioral rules.
+
+- Greenwood, A.K. et al. (2013). [Genetic and neural modularity underlie the evolution of schooling behavior in threespine sticklebacks](https://pmc.ncbi.nlm.nih.gov/articles/PMC3828509/). *Current Biology*, 23(19), 1884–1888.
+- [Fred Hutch: Why fish school — genetic link to social behavior](https://www.fredhutch.org/en/news/center-news/2016/06/why-fish-school-study-finds-genetic-link-stickleback.html).
+
+#### Guppies: Schooling, Neuroanatomy, and Predation
+
+Artificial selection experiments on guppies for schooling propensity reveal:
+- Alignment and attraction behaviors show **high heritability** (upper end of the range for social behaviors).
+- **Genes involved in neuron migration and synaptic function** play key roles.
+- Guppies selected for higher schooling show changes in **brain morphology** that increase efficiency of sensory information relay.
+- Schooling evolution drives corresponding changes in anti-predator behavior and neuroanatomy.
+
+- Kotrschal, A. et al. (2023). [Evolution of schooling drives changes in neuroanatomy and motion characteristics across predation contexts in guppies](https://www.nature.com/articles/s41467-023-41635-6). *Nature Communications*, 14, 5838.
+- Heathcote, R.J.P. et al. (2023). [Functional convergence of genomic and transcriptomic architecture underlies schooling behaviour in a live-bearing fish](https://www.nature.com/articles/s41559-023-02249-9). *Nature Ecology & Evolution*.
+
+#### Broader Genetic Architecture
+
+The genetic architecture of collective behavior involves multiple systems:
+- Sensory system genes (lateral line, vision)
+- Neural circuit genes (synaptic function, neuron migration)
+- Genes affecting individual movement parameters (speed, turning rate)
+- Genes involved in social responsiveness
+
+- Davidson, J.D. et al. (2023). [A multi-scale review of the dynamics of collective behaviour](https://pmc.ncbi.nlm.nih.gov/articles/PMC9939272/). *Philosophical Transactions of the Royal Society B*.
+
+---
+
+### Summary: How Herding/Flocking Gets Selected For
+
+1. **Primary driver:** Predator avoidance (selfish herd, dilution, confusion, many eyes).
+2. **Secondary drivers:** Energy savings, enhanced foraging through information sharing.
+3. **Genetic basis:** Heritable variation in sensory systems (lateral line, vision) and neural circuits, with specific genes identified in model organisms.
+4. **No paradox for edge individuals:** Aggregating (even at the edge) is better on average than being solitary; dynamic position changes distribute risk; dominance hierarchies sort positions but do not prevent herding from evolving.
+5. **Kin selection is not required** but can reinforce collective behavior in kin-structured groups.
+6. **Group selection is not required** but multilevel selection may provide additional pressure in some contexts.
+
+### Relevance to Evolved Boid Simulations
+
+Several key takeaways for Wild Boids:
+
+- **Predation pressure is essential:** Without predators (or a fitness proxy for predation), collective movement will not evolve. The Ioannou et al. (2012) study directly confirms this — predators are the selection mechanism.
+- **Simple sensory rules suffice:** The zebrafish genetics research shows that just two visual reflexes produce collective behavior. This validates the sensor-based approach over complex cognitive models.
+- **Sensory system evolution matters:** The stickleback work shows that changes in sensory organs (not just behavioral rules) drive schooling evolution. In Wild Boids, evolving sensor parameters (range, angle, sensitivity) is biologically realistic.
+- **The "selfish herders finish last" result is interesting for mobile groups:** If Wild Boids prey are being chased, pure domain-of-danger minimization may not be optimal. Cooperative movement rules (alignment, cohesion) may emerge as superior strategies.
+- **Energy savings could be an additional selection pressure** if the simulation models metabolic cost of movement, providing a non-predation reason for grouping to evolve.
+
+---
+
 ## Sources
 
 - [Craig Reynolds' Boids](https://www.red3d.com/cwr/boids/)
@@ -373,3 +548,22 @@ The original didn't implement mutation, but [research suggests it's important](h
 - [Evolutionary Arms Race](https://en.wikipedia.org/wiki/Evolutionary_arms_race)
 - [ABED: Agent-Based Evolutionary Dynamics](https://www.sciencedirect.com/science/article/abs/pii/S0899825619301459)
 - [Evolving Agent-Based Models](https://www.sciencedirect.com/science/article/abs/pii/S1877750315000320)
+- [Collective behaviour in 480-million-year-old trilobites (Vannier et al. 2019)](https://www.nature.com/articles/s41598-019-51012-3)
+- [Hamilton (1971) — Geometry for the Selfish Herd](https://www.sciencedirect.com/science/article/abs/pii/0022519371901895)
+- [Confusion effect in starling flocks](https://royalsocietypublishing.org/doi/10.1098/rsos.160564)
+- [Ioannou et al. (2012) — Predatory fish select for coordinated collective motion](https://www.science.org/doi/10.1126/science.1218919)
+- [Energy conservation by collective movement in schooling fish (eLife)](https://elifesciences.org/articles/90352)
+- [Couzin & Krause (2003) — Self-Organization and Collective Behavior in Vertebrates](https://www.semanticscholar.org/paper/Self-Organization-and-Collective-Behavior-in-Couzin-Krause/7ff4729f29ac11d0baca19878761bb1cccd7d1d6)
+- [Sumpter (2006) — The principles of collective animal behaviour](https://pmc.ncbi.nlm.nih.gov/articles/PMC1626537/)
+- [Reluga & Viscido (2005) — Simulated evolution of selfish herd behavior](https://www.sciencedirect.com/science/article/abs/pii/S0022519304005715)
+- [Wood & Ackland (2007) — Evolving the selfish herd](https://pmc.ncbi.nlm.nih.gov/articles/PMC2169279/)
+- [De Vos & O'Riain (2010) — Sharks shape the geometry of a selfish seal herd](https://pmc.ncbi.nlm.nih.gov/articles/PMC2817263/)
+- [Quinn & Cresswell (2006) — Testing domains of danger](https://pmc.ncbi.nlm.nih.gov/articles/PMC1634896/)
+- [Romenskyy et al. (2022) — Selfish herders finish last](https://royalsocietypublishing.org/rspb/article/289/1985/20221653/79590/Selfish-herders-finish-last-in-mobile-animal)
+- [Pinker (2012) — The False Allure of Group Selection](https://www.edge.org/conversation/steven_pinker-the-false-allure-of-group-selection)
+- [Tang et al. (2020) — Genetic Control of Collective Behavior in Zebrafish](https://www.hsci.harvard.edu/news/genetic-control-collective-behavior-zebrafish)
+- [Harpaz et al. (2021) — Collective behavior from genetically controlled behavioral motifs](https://pmc.ncbi.nlm.nih.gov/articles/PMC8494438/)
+- [Greenwood et al. (2013) — Genetic modularity in stickleback schooling](https://pmc.ncbi.nlm.nih.gov/articles/PMC3828509/)
+- [Kotrschal et al. (2023) — Evolution of schooling drives neuroanatomy changes in guppies](https://www.nature.com/articles/s41467-023-41635-6)
+- [Heathcote et al. (2023) — Genomic architecture of schooling in guppies](https://www.nature.com/articles/s41559-023-02249-9)
+- [Davidson et al. (2023) — Multi-scale review of collective behaviour dynamics](https://pmc.ncbi.nlm.nih.gov/articles/PMC9939272/)

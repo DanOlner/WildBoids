@@ -190,3 +190,5 @@
 2595	3019	1771954429470633634	wildboids_tests	55cea9a807c3df71
 2595	3019	1771954429470633634	wildboids_tests-b12d07c_tests.cmake	55cea9a807c3df71
 2595	3019	1771954429470633634	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	55cea9a807c3df71
+10	675	1771958726196690267	CMakeFiles/wildboids_headless.dir/src/headless_main.cpp.o	138e7d669fe8158b
+675	704	1771958726861852952	wildboids_headless	3c02d6d5a49b6eff
