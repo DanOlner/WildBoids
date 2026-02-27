@@ -36,7 +36,7 @@ void World::step(float dt, std::mt19937* rng) {
     }
 
     rebuild_grid();
-    run_sensors();
+    run_sensors(rng);
     run_brains();
     deduct_energy(dt);
     check_food_eating();
@@ -53,14 +53,14 @@ void World::pre_seed_food(std::mt19937& rng) {
     }, food_source_);
 }
 
-void World::run_sensors() {
+void World::run_sensors(std::mt19937* rng) {
     for (int i = 0; i < static_cast<int>(boids_.size()); ++i) {
         auto& boid = boids_[i];
         if (!boid.alive) continue;
         if (!boid.sensors) continue;
         boid.sensor_outputs.resize(boid.sensors->input_count());
         boid.sensors->perceive(boids_, grid_, config_, i, food_,
-                               boid.sensor_outputs.data());
+                               boid.sensor_outputs.data(), rng);
     }
 }
 

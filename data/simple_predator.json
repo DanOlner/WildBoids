@@ -81,6 +81,7 @@
         ],
         "channels": ["food", "same", "opposite"],
         "speedSensor": true,
-        "angularVelocitySensor": true
+        "angularVelocitySensor": true,
+        "noiseSensor": true
     }
 }

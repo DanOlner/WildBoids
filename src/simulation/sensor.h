@@ -3,7 +3,7 @@
 #include <cmath>
 #include <vector>
 
-enum class EntityFilter { Prey, Predator, Any, Food, Speed, AngularVelocity };
+enum class EntityFilter { Prey, Predator, Any, Food, Speed, AngularVelocity, Noise };
 enum class SignalType { NearestDistance, SectorDensity };
 
 // Channels for compound-eye sensors
@@ -32,11 +32,13 @@ struct CompoundEyeConfig {
     std::vector<SensorChannel> channels;  // which channels are active
     bool has_speed_sensor = true;
     bool has_angular_velocity_sensor = false;
+    bool has_noise_sensor = false;
 
     int total_inputs() const {
         return static_cast<int>(eyes.size()) * static_cast<int>(channels.size())
                + (has_speed_sensor ? 1 : 0)
-               + (has_angular_velocity_sensor ? 1 : 0);
+               + (has_angular_velocity_sensor ? 1 : 0)
+               + (has_noise_sensor ? 1 : 0);
     }
 };
 

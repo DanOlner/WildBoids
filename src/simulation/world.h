@@ -80,7 +80,7 @@ private:
 
     void wrap_position(Vec2& pos) const;
     void rebuild_grid();
-    void run_sensors();
+    void run_sensors(std::mt19937* rng);
     void run_brains();
     void spawn_food(float dt, std::mt19937& rng);
     void check_food_eating();

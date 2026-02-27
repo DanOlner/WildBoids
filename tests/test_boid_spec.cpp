@@ -46,7 +46,7 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.compound_eyes->has_speed_sensor == true);
     CHECK(spec.compound_eyes->eyes[0].id == 0);
     CHECK_THAT(spec.compound_eyes->eyes[0].center_angle, WithinAbs(0.0f, 1e-4f));
-    CHECK(sensor_input_count(spec) == 50);
+    CHECK(sensor_input_count(spec) == 51);
 }
 
 TEST_CASE("Create boid from spec", "[boid_spec]") {
@@ -67,8 +67,8 @@ TEST_CASE("Create boid from spec", "[boid_spec]") {
     // Compound-eye sensors wired up
     REQUIRE(boid.sensors.has_value());
     CHECK(boid.sensors->is_compound());
-    CHECK(boid.sensors->input_count() == 50);
-    CHECK(boid.sensor_outputs.size() == 50);
+    CHECK(boid.sensors->input_count() == 51);
+    CHECK(boid.sensor_outputs.size() == 51);
 }
 
 TEST_CASE("Round-trip save and reload", "[boid_spec]") {

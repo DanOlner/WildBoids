@@ -679,3 +679,46 @@ struct CompoundEyeConfig {
 **Backward compatibility verified:** Headless smoke test with `data/4thruster_foodonly_simple_boid.json` (legacy 11-sensor format) runs successfully. Existing dual-evolution tests with programmatic legacy specs (`make_prey_spec()`, `make_predator_spec()`) pass unchanged.
 
 **221 tests, all passing** (210 previous + 9 compound-eye sensor + 2 compound-eye spec).
+
+---
+
+### Option C2/C3: Proprioceptive sensors — angular velocity + noise (221 → 241 tests) [27.2.26]
+
+Added two new proprioceptive sensor inputs following the existing speed sensor pattern. Both are appended after the speed sensor in the compound-eye output layout: `[...eye channels..., speed, angular_velocity, noise]`.
+
+#### Angular velocity sensor (C2)
+
+Reads `body.angular_velocity` (already tracked by `RigidBody::integrate()`), normalized to [-1, 1] by dividing by `max_angular_speed` and clamping. Positive = CCW spin, negative = CW spin. Gives boids awareness of their own rotation — enables anti-oscillation behavior ("if spinning fast, stop steering") and smooth pursuit ("modulate turn rate to avoid overshooting food").
+
+**Normalization:** New `WorldConfig::max_angular_speed = 10.0f` constant (analogous to `max_speed = 50.0f`), configurable via `sim_config.json` `"maxAngularSpeed"` key.
+
+**6 new tests:** stationary returns 0, CCW returns positive, CW returns negative, clamps to [-1,1], compound-eye index placement after speed, `total_inputs()` counting.
+
+#### Noise sensor (C3)
+
+Outputs `uniform_random(-1, 1)` each tick, giving the NEAT network a source of stochasticity that evolution can learn to exploit. Evolution controls influence via connection weights — can route noise selectively to specific thrusters (e.g., steering jitter to break oscillations) while keeping others clean, or ignore it entirely with zero-weight connections.
+
+**RNG threading:** `SensorySystem::perceive()` gained an `std::mt19937* rng = nullptr` parameter. When null (tests, GUI without rng), noise outputs 0. When provided (headless evolution, GUI with rng), generates fresh random values. Threaded from `World::step(rng)` → `run_sensors(rng)` → `perceive(..., rng)`. All existing test call sites unchanged (default nullptr).
+
+**5 new tests:** output in [-1,1] with RNG, output 0 without RNG, varies across calls, `total_inputs()` counting, compound-eye index after angular velocity.
+
+#### Files modified
+
+| File | Change |
+|------|--------|
+| `src/simulation/sensor.h` | Added `AngularVelocity`, `Noise` to `EntityFilter` enum. Added `has_angular_velocity_sensor`, `has_noise_sensor` bools to `CompoundEyeConfig`. Updated `total_inputs()` |
+| `src/simulation/sensory_system.h` | Added `std::mt19937* rng = nullptr` parameter to `perceive()` and `perceive_compound()`. Added `#include <random>` |
+| `src/simulation/sensory_system.cpp` | Angular velocity + noise evaluation in both legacy and compound-eye paths. `passes_filter()` returns false for both new types. Compound path uses incrementing `proprio_idx` for correct ordering |
+| `src/simulation/world.h` | Added `max_angular_speed = 10.0f` to `WorldConfig`. Changed `run_sensors()` to `run_sensors(std::mt19937* rng)` |
+| `src/simulation/world.cpp` | Thread rng from `step()` through `run_sensors()` to `perceive()` |
+| `src/io/boid_spec.cpp` | Parse/write `"angularVelocitySensor"` and `"noiseSensor"` bools. Added `"angularVelocity"` and `"noise"` to entity filter string conversion |
+| `src/io/sim_config.cpp` | Parse `"maxAngularSpeed"` from world section |
+| `data/simple_boid.json` | Added `"angularVelocitySensor": true, "noiseSensor": true` |
+| `data/simple_predator.json` | Same |
+| `data/sim_config.json` | Added `"maxAngularSpeed": 10.0` to world section |
+| `tests/test_sensor.cpp` | 11 new tests (6 angular velocity + 5 noise) |
+| `tests/test_boid_spec.cpp` | Updated input count checks: 49 → 51 (16 eyes × 3 channels + speed + angular_vel + noise) |
+
+**NEAT input count:** 49 → 51. No brain code changes — flows automatically from `CompoundEyeConfig::total_inputs()`.
+
+**241 tests, all passing** (221 previous + 6 angular velocity + 5 noise + 9 existing test count updates).

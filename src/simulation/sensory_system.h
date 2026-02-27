@@ -4,6 +4,7 @@
 #include "simulation/vec2.h"
 #include <vector>
 #include <optional>
+#include <random>
 
 struct Boid;
 struct Food;
@@ -30,7 +31,8 @@ public:
                   const WorldConfig& config,
                   int self_index,
                   const std::vector<Food>& food,
-                  float* outputs) const;
+                  float* outputs,
+                  std::mt19937* rng = nullptr) const;
 
 private:
     std::vector<SensorSpec> specs_;                 // legacy mode
@@ -50,5 +52,6 @@ private:
                            const WorldConfig& config,
                            int self_index,
                            const std::vector<Food>& food,
-                           float* outputs) const;
+                           float* outputs,
+                           std::mt19937* rng) const;
 };

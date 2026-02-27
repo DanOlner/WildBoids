@@ -16,6 +16,7 @@ static EntityFilter parse_entity_filter(const std::string& s) {
     if (s == "food") return EntityFilter::Food;
     if (s == "speed") return EntityFilter::Speed;
     if (s == "angularVelocity") return EntityFilter::AngularVelocity;
+    if (s == "noise") return EntityFilter::Noise;
     return EntityFilter::Any;
 }
 
@@ -27,6 +28,7 @@ static std::string entity_filter_to_string(EntityFilter f) {
         case EntityFilter::Food:     return "food";
         case EntityFilter::Speed:    return "speed";
         case EntityFilter::AngularVelocity: return "angularVelocity";
+        case EntityFilter::Noise: return "noise";
     }
     return "any";
 }
@@ -143,6 +145,7 @@ BoidSpec load_boid_spec(const std::string& path) {
 
         cfg.has_speed_sensor = jce.value("speedSensor", true);
         cfg.has_angular_velocity_sensor = jce.value("angularVelocitySensor", false);
+        cfg.has_noise_sensor = jce.value("noiseSensor", false);
         spec.compound_eyes = std::move(cfg);
     }
     // Legacy sensors — old specs without compound eyes still load fine
@@ -261,6 +264,7 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
 
         jce["speedSensor"] = spec.compound_eyes->has_speed_sensor;
         jce["angularVelocitySensor"] = spec.compound_eyes->has_angular_velocity_sensor;
+        jce["noiseSensor"] = spec.compound_eyes->has_noise_sensor;
         j["compoundEyes"] = jce;
     } else if (!spec.sensors.empty()) {
         j["sensors"] = json::array();

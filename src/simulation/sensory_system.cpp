@@ -22,9 +22,10 @@ void SensorySystem::perceive(const std::vector<Boid>& boids,
                               const WorldConfig& config,
                               int self_index,
                               const std::vector<Food>& food,
-                              float* outputs) const {
+                              float* outputs,
+                              std::mt19937* rng) const {
     if (is_compound()) {
-        perceive_compound(boids, grid, config, self_index, food, outputs);
+        perceive_compound(boids, grid, config, self_index, food, outputs, rng);
         return;
     }
     const Boid& self = boids[self_index];
@@ -41,6 +42,7 @@ static bool passes_filter(EntityFilter filter, const std::string& type) {
         case EntityFilter::Food:     return false; // food filter doesn't match boids
         case EntityFilter::Speed:    return false; // proprioceptive, not spatial
         case EntityFilter::AngularVelocity: return false; // proprioceptive, not spatial
+        case EntityFilter::Noise: return false; // proprioceptive, not spatial
     }
     return false;
 }
@@ -98,6 +100,9 @@ float SensorySystem::evaluate_sensor(const SensorSpec& spec,
         if (max_av <= 0.0f) return 0.0f;
         return std::max(-1.0f, std::min(1.0f, self.body.angular_velocity / max_av));
     }
+    if (spec.filter == EntityFilter::Noise) {
+        return 0.0f; // legacy path has no RNG access
+    }
 
     float range_sq = spec.max_range * spec.max_range;
     float nearest_dist_sq = range_sq + 1.0f;
@@ -142,7 +147,8 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
                                        const WorldConfig& config,
                                        int self_index,
                                        const std::vector<Food>& food,
-                                       float* outputs) const {
+                                       float* outputs,
+                                       std::mt19937* rng) const {
     const Boid& self = boids[self_index];
     const auto& cfg = *eye_config_;
     int n_channels = static_cast<int>(cfg.channels.size());
@@ -253,5 +259,14 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
         outputs[proprio_idx] = (max_av > 0)
             ? std::max(-1.0f, std::min(1.0f, self.body.angular_velocity / max_av))
             : 0.0f;
+        proprio_idx++;
+    }
+    if (cfg.has_noise_sensor) {
+        if (rng) {
+            std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+            outputs[proprio_idx] = dist(*rng);
+        } else {
+            outputs[proprio_idx] = 0.0f;
+        }
     }
 }

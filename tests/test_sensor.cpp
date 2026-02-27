@@ -884,6 +884,134 @@ TEST_CASE("Compound eye: total_inputs counts angular velocity sensor", "[sensor]
     CHECK(cfg.total_inputs() == 14);
 }
 
+// ---- Noise (proprioceptive) sensor tests ----
+
+TEST_CASE("Noise sensor with RNG: output in [-1, 1]", "[sensor][proprioception][noise]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_noise_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    CHECK(sys.input_count() == 2); // 1 eye × 1 channel + 1 noise
+
+    Boid b = make_boid({400, 400});
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    std::mt19937 rng(42);
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs, &rng);
+
+    CHECK(outputs[1] >= -1.0f);
+    CHECK(outputs[1] <= 1.0f);
+}
+
+TEST_CASE("Noise sensor without RNG: output is 0", "[sensor][proprioception][noise]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_noise_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Noise sensor varies across calls", "[sensor][proprioception][noise]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_noise_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    std::mt19937 rng(42);
+    float outputs_a[2] = {0};
+    float outputs_b[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs_a, &rng);
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs_b, &rng);
+
+    // Two calls with advancing rng should produce different noise values
+    CHECK(outputs_a[1] != outputs_b[1]);
+}
+
+TEST_CASE("Compound eye: total_inputs counts noise sensor", "[sensor][compound][noise]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = true;
+    cfg.has_noise_sensor = false;
+    for (int i = 0; i < 4; ++i) {
+        cfg.eyes.push_back(EyeSpec{i, 0, 90 * DEG, 100});
+    }
+    // 4 eyes × 3 channels + speed + angular_vel = 14
+    CHECK(cfg.total_inputs() == 14);
+
+    cfg.has_noise_sensor = true;
+    // 4 eyes × 3 channels + speed + angular_vel + noise = 15
+    CHECK(cfg.total_inputs() == 15);
+}
+
+TEST_CASE("Compound eye: noise appended after angular velocity", "[sensor][compound][noise]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = true;
+    cfg.has_noise_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    CHECK(sys.input_count() == 4); // 1 eye × 1 channel + speed + angular_vel + noise
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 25.0f};
+    b.body.angular_velocity = 5.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    wc.max_angular_speed = 10.0f;
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    std::mt19937 rng(42);
+    float outputs[4] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs, &rng);
+
+    // Eye output: no food
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Speed: 25/50 = 0.5
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
+    // Angular velocity: 5/10 = 0.5
+    CHECK_THAT(outputs[2], WithinAbs(0.5f, 0.02f));
+    // Noise: some value in [-1, 1]
+    CHECK(outputs[3] >= -1.0f);
+    CHECK(outputs[3] <= 1.0f);
+    CHECK(outputs[3] != 0.0f); // with rng, extremely unlikely to be exactly 0
+}
+
 TEST_CASE("Compound eye: toroidal detection across world edge", "[sensor][compound]") {
     CompoundEyeConfig cfg;
     cfg.channels = {SensorChannel::Same};
