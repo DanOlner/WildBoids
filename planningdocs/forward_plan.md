@@ -1435,6 +1435,58 @@ Candidate proprioceptive sensors:
 
 **Effort:** Medium — modify network activation to handle cycles, allow NEAT mutations to create recurrent connections (currently add-connection only creates feed-forward ones).
 
+**How recurrent connections work in detail:**
+
+Every connection in the genome gets classified as exactly one of two types:
+- **Feed-forward**: source is "earlier" in eval order than target. Reads the source's **current tick** value. This is what we have now.
+- **Recurrent**: source is "later than or equal to" target in eval order (would create a cycle). Reads the source's **previous tick** value.
+
+A recurrent connection is recurrent *only* — it doesn't also contribute to the current tick's feed-forward pass. The one-tick delay is what makes cycles solvable: `prev_value` is already known (computed last tick), so there's no ordering problem. The topological sort still works — you just exclude recurrent connections from the sort graph.
+
+**Changes to `NeatNetwork`:**
+
+The current `activate()` (`neat_network.cpp:99-130`) computes every node fresh each tick with no state carried between calls. The change is small:
+
+1. **Add `prev_value` storage** — each `RuntimeNode` gets `float prev_value = 0.0f`. At the start of `activate()`, copy all `value` → `prev_value`.
+
+2. **Flag connections** — `RuntimeConnection` gets `bool recurrent`. During construction, connections that go "backward" in eval order (or are self-connections) get flagged.
+
+3. **Split the inner loop** — the current accumulation loop becomes:
+   ```cpp
+   for (int idx : eval_order_) {
+       float sum = nodes_[idx].bias;
+       for (const auto& c : incoming_[idx]) {
+           if (c.recurrent)
+               sum += nodes_[c.source_idx].prev_value * c.weight;  // last tick
+           else
+               sum += nodes_[c.source_idx].value * c.weight;       // this tick
+       }
+       nodes_[idx].value = apply_activation(nodes_[idx].activation, sum);
+   }
+   ```
+
+4. **`build_eval_order()` ignores recurrent edges** — the topological sort only counts feed-forward connections for in-degree. Recurrent edges are excluded from the DAG.
+
+5. **`reset()` matters now** — between generations or when reusing a network, `prev_value` must be zeroed since it carries meaningful state.
+
+6. **Mutation** — `mutate_add_connection()` currently only creates feed-forward connections (source must be "earlier" than target). With recurrence enabled, it sometimes picks backward pairs, flagging them as recurrent.
+
+**The conceptual shift:** the network is no longer a pure function `f(sensors) → thrusters`. It becomes a state machine: `f(sensors, prev_state) → (thrusters, new_state)`. Each boid's network carries hidden state between ticks. Two boids with identical sensor inputs can produce different outputs if their recent histories differ.
+
+**What recurrence gives you in practice:**
+
+- A **self-connection** (node 55 → node 55, recurrent) with weight 0.8 creates an exponential decay — the node "remembers" its recent activations with a half-life of a few ticks. This is the NEAT equivalent of a leaky integrator neuron.
+- An **output-to-hidden** connection (e.g. rear thruster output → hidden node, recurrent) lets the network sense "what was I doing last tick?" — enabling behaviours like "keep doing what I was doing" or "alternate between strategies."
+- A **hidden-to-hidden** backward connection can create oscillators (useful for rhythmic behaviours like patrol patterns or casting search).
+
+**Configuration:**
+
+A single `"recurrent": true` flag in `sim_config.json` under the `"neat"` section controls everything. When false (default), `mutate_add_connection()` only creates feed-forward connections — identical to current behaviour. When true, backward connections are allowed with some probability. Existing feed-forward genomes and champions load and run unchanged (zero recurrent connections = identical activation). You could even start evolution with `recurrent: false`, train for 100 generations, then flip to `true` — existing genomes carry over, and now new mutations can add recurrence on top.
+
+**Biological parallel:** the one-tick delay is actually a decent approximation of reality. Real neurons have propagation delays — signals take time to travel along axons, cross synapses, and trigger postsynaptic potentials. The feed-forward assumption (everything within a tick is instantaneous) is the bigger biological lie. And unlike architectures that make the whole network recurrent by design (LSTMs, Elman networks), NEAT can place recurrence selectively — a single self-connection on one specific hidden node, giving that node memory while keeping everything else reactive. This mirrors biological circuits: specific feedback loops for specific functions (working memory in prefrontal cortex, motor pattern generators in the spinal cord), not uniform recurrence everywhere.
+
+**Search space concern:** recurrence roughly doubles the space of possible connections (any node can now connect to any other, not just "later" ones). However, NEAT's complexification-from-minimal approach mitigates this — evolution starts fully feed-forward, and recurrent connections only appear when `mutate_add_connection()` happens to pick a backward pair. The search space expands gradually as recurrent connections get tried and either prove useful (kept by selection) or don't (pruned). A `recurrentConnectionProb` parameter (e.g. 0.1–0.2) controls how often mutation attempts a backward connection vs a feed-forward one.
+
 ---
 
 ### Suggested sequencing
@@ -2289,4 +2341,102 @@ The current 11-input / 6-output setup is probably near the lower bound for usefu
 The risk of too many inputs is slower early evolution (more connections to search over, more initial genome complexity). But NEAT's complexification-from-minimal approach mitigates this: it starts by finding useful direct sensor→thruster mappings and only adds hidden-node complexity later. The key insight is that **more inputs don't add hidden-node complexity — they add connection variety**, which is exactly what NEAT's initial search phase needs.
 
 A reasonable heuristic: aim for at least 3–5× as many inputs as outputs. This gives each output node enough distinct sensory signals to learn differentiated responses, while keeping the initial genome manageable. For 6 thrusters, that suggests 18–30 inputs — right in the 8-eye × 3-channel range.
+
+---
+
+## Biological parallels for multi-scale sensing
+
+The compound-eye system gives boids detailed spatial information at short-to-medium range (100 units). But real animals layer multiple sensing modalities at different ranges and resolutions. This section explores biological precedents that could inform additional longer-distance, "vaguer" senses for boids — ones that feel qualitatively different from the sharp segment-based compound eyes.
+
+### The problem with uniform sensing
+
+The current compound eyes are essentially binary at their limit: either something is within 100 units and you get a distance-graded signal, or it's invisible. This creates a hard perceptual horizon. In nature, almost nothing works this way — animals sense at multiple scales with gracefully degrading precision.
+
+### Biological multi-scale sensing
+
+**1. Lateral line / water vibration (fish, amphibians)**
+
+Fish have a lateral line organ running along their body that detects pressure waves and water displacement. It gives a coarse, omnidirectional sense of "something moving nearby" without precise direction or identity. Key properties:
+- **Omnidirectional** — no angular resolution, just "activity level nearby"
+- **Movement-sensitive** — stationary objects are invisible; only moving things produce signals
+- **Range degrades smoothly** — signal strength falls off with inverse-square of distance
+- **Cheap** — passive, no energy cost, always on
+
+*Wildboids analogue:* A single "vibration" input that sums nearby boid movement (weighted by inverse distance²). Long range but no directional info. Value might be: total kinetic energy of boids within 300-500 units, normalised. This gives a vague "busy area" signal without telling the boid *where* to go — it would need to correlate with compound-eye data to act usefully.
+
+**2. Olfaction / chemical gradients (insects, sharks, salmon)**
+
+Chemical sensing works over enormous distances but with very poor spatial resolution. A moth tracking pheromones doesn't know exactly where the source is — it samples concentration at its current location and performs upwind casting (zigzag flight) to follow the gradient. Key properties:
+- **Scalar, not directional** — you sense concentration *here*, not direction to source
+- **Very long range** — kilometres for moths, hundreds of metres for sharks
+- **Time-delayed** — chemicals diffuse slowly, so the signal represents the recent past
+- **Gradient-following requires movement** — you must move and compare concentrations over time to extract direction
+- **Wind/current dependent** — the medium carries the signal, so it's not a straight line to the source
+
+*Wildboids analogue:* A "scent" field that diffuses from food patches (or from clusters of boids). Each boid samples the local concentration — a single scalar value. To navigate by scent, the NEAT network would need to learn to compare current concentration with recent memory (which it can't do directly without recurrence, but it could learn a "move forward if scent is increasing" heuristic from the correlation between thrust and changing scent signal over consecutive ticks). This could work especially well if food patches are far apart relative to compound-eye range, creating a "scent-then-see" two-phase foraging strategy.
+
+**3. Echolocation (bats, dolphins, oilbirds)**
+
+Active sensing that gives range and angular information but at a cost. Key properties:
+- **Active — requires energy emission** (vocalization, clicks)
+- **Long range** — 50+ metres for bats, 100+ metres for dolphins
+- **Returns range AND direction** — better spatial resolution than chemical or vibration
+- **Energetically expensive** — producing and processing calls is costly
+- **Reveals your position** — predators can eavesdrop on echolocation calls
+- **Duty-cycled** — animals don't echolocate constantly; they ping and listen, adjusting rate to need
+- **Cluttered environments reduce effectiveness** — echoes from multiple objects create confusion
+
+*Wildboids analogue:* A "ping" action that costs energy and returns a summary of what's within a long radius (say 400 units). Could be a dedicated output node (thruster-like, 0–1) where the boid decides each tick whether to ping. Returns something coarser than compound eyes — maybe just 4 quadrant summaries (front/back/left/right) for each channel, or even just "nearest food distance" and "nearest boid distance" globally. The energy cost creates a genuine decision: ping frequently for better awareness, or save energy for thrust. Predators eavesdropping on pings would add another co-evolutionary pressure.
+
+**4. Electroreception (sharks, rays, platypus, electric eels)**
+
+Detects bioelectric fields generated by muscle activity. Key properties:
+- **Passive** — detects fields generated by other animals' movement (no energy cost to sense)
+- **Very short range for passive** (~1 metre for sharks detecting prey heartbeats)
+- **Medium range for active** (electric fish generate fields, ~2 metres)
+- **Works in total darkness / murky water** — complementary to vision
+- **Detects living things specifically** — doesn't detect food/inanimate objects
+- **Sensitive to movement** — muscle contractions generate stronger signals
+
+*Wildboids analogue:* Interesting for predator-prey asymmetry. Predators might sense the *thruster activity* of nearby prey — the more a prey is thrusting (fleeing), the more detectable it is. This creates a stealth/speed dilemma: moving slowly makes you harder to detect but easier to catch. Could be a simple input: "total thrust output of boids within radius X, weighted by distance." No directional info, just intensity.
+
+**5. Infrared pit organs (pit vipers, some boas, vampire bats)**
+
+Thermal sensing that works like a crude second set of "eyes" but at a different wavelength. Key properties:
+- **Directional** — pit organs have angular resolution, like a blurry camera
+- **Medium range** — effective to ~1 metre for snakes (scales with prey thermal signature)
+- **Detects warm-blooded prey specifically** — complementary to vision
+- **Low angular resolution** — much blurrier than vision, more like "warm blob that way"
+- **Passive** — no energy cost
+
+*Wildboids analogue:* A second set of wider, fewer "eyes" with much longer range but coarser resolution. Maybe 4 quadrant detectors at 400-unit range, compared to 16 fine eyes at 100-unit range. These could detect different things — e.g. the long-range eyes might only see boids (not food), creating a "wide scan then narrow focus" two-stage detection.
+
+### Design principles from biology
+
+Several patterns emerge from these biological examples:
+
+**Principle 1: Scalar vs. spatial** — The cheapest long-range senses give you a scalar (concentration, vibration level) without direction. Getting direction requires either multiple samples over time (olfaction + movement) or more expensive sensing (echolocation). This creates a natural hierarchy: cheap omnidirectional awareness → expensive directional information.
+
+**Principle 2: Active sensing has costs** — Echolocation, electric field generation, and even head-scanning in vision all cost energy. This creates genuine behavioural decisions: when to invest in sensing. In wildboids, making some senses cost energy would add a new dimension to evolved strategies.
+
+**Principle 3: Movement reveals and conceals** — Many senses detect movement preferentially (lateral line, electroreception, motion-sensitive vision). This creates speed/stealth trade-offs that don't exist when sensing is purely distance-based.
+
+**Principle 4: Modalities complement, not duplicate** — Animals rarely have two senses that do the same job at the same range. Each modality fills a different niche in range/resolution/cost space. If we add long-range sensing, it should feel qualitatively different from compound eyes, not just "compound eyes but further."
+
+**Principle 5: Temporal integration matters** — Chemical gradients, vibration patterns, and echolocation all benefit from memory — comparing current signals with recent past. Our feed-forward NEAT networks can't do this directly, but two mechanisms could help: (a) input nodes that encode *change* (delta from last tick), or (b) recurrent connections in NEAT (a significant architectural addition).
+
+### Candidate implementations for wildboids (rough ranking by complexity)
+
+| Sense | Range | Resolution | Cost | New inputs | Implementation complexity |
+|-------|-------|-----------|------|-----------|--------------------------|
+| **Vibration field** | 300–500 | Scalar (omnidirectional) | Free | 1 | Low — sum nearby boid speeds, inverse-distance weighted |
+| **Scent/gradient** | World-wide | Scalar (local concentration) | Free | 1–2 | Medium — need a diffusion field updated each tick |
+| **Long-range coarse eyes** | 300–400 | 4 quadrants | Free | 4–12 | Low — same as compound eyes but fewer/wider |
+| **Thrust-detection** | 200 | Scalar | Free | 1 | Low — sum nearby thrust, distance weighted |
+| **Echolocation ping** | 400 | 4 quadrants | Energy | 4–12 + 1 output | Medium — new output node, conditional sensing |
+| **Delta/change inputs** | Same as compound eyes | Per-eye | Free | 49 (doubles input) | Low code, high NEAT cost |
+
+The simplest addition that's most "biologically different" from compound eyes would be **vibration field** (1 scalar input, tells you "things are moving nearby but not where") plus **long-range coarse eyes** (4 wide quadrant detectors at 3–4× the compound eye range, giving rough directional info at distance). Together that's 5–13 new inputs for a qualitatively richer sensory world, without a huge increase in NEAT genome complexity.
+
+The most *interesting* addition for co-evolution would be **echolocation** (active, costly, directional) or **thrust-detection** (passive, creates stealth/speed dilemma). These add behavioural dimensions that pure distance sensing can't.
 

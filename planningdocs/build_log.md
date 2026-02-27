@@ -594,3 +594,88 @@ Both checks are gated by `config.mouth_enabled` (default `false`), so existing b
 **Reused utilities:** `angle_in_arc()` from `sensor.h`, `Vec2::rotated()` for body-frame rotation, `Vec2::dot()` for velocity approach check, `toroidal_delta()` for directional delta.
 
 **210 tests, all passing** (201 previous + 5 food mouth + 4 predation mouth).
+
+---
+
+### Option L: Compound-eye sensor refactoring (210 → 221 tests) [27.2.26]
+
+Replaced the separate per-filter sensor arrays (7 "any" boid sensors + 3 food/prey sensors + 1 speed = 11 inputs) with unified "compound eyes" — 16 physical eyes each producing up to 3 channels (food, same-type, opposite-type) plus 1 speed sensor = **49 NEAT inputs**. Prey and predator specs are now identical except for the `type` field — "same" vs "opposite" is resolved at runtime from `boid.type`.
+
+**Key design decisions:**
+
+- **Multi-channel eyes**: Each eye detects food, same-type boids, and opposite-type boids simultaneously, providing correlated spatial information ("food AND predator at 2 o'clock")
+- **Two-level channel system**: Channels appear in two places that serve different roles. The **boid spec** `"channels"` (in `simple_boid.json` / `simple_predator.json`) defines the NEAT network **structure** — which channel slots exist in the output array and their order. This is baked into the genome topology (16 eyes × 3 channels + 1 speed = 49 inputs). The **sim_config** `"channels"` (in `sim_config.json`) acts as a **runtime gate** — it populates `WorldConfig.enabled_channels`, and during `perceive_compound()` any channel not in that list produces 0.0 even though the NEAT input slot still exists. This lets you run experiments like food-only foraging (`"channels": ["food"]` in sim_config) without changing boid specs or retraining genomes — the boid still has 49 inputs, but the 32 same/opposite slots stay at zero
+- **Same/Opposite naming**: Species-agnostic. A prey's "same" channel detects other prey; a predator's "same" channel detects other predators. Both use identical sensor specs
+- **Variable arc width layout**: 5 narrow 18° eyes in front (high precision), 11 wider 27° eyes covering flanks and rear (coarser coverage), tiling the full 360°
+- **Single grid query optimization**: Old system queried the spatial grid 7× per boid (once per boid sensor). New system queries once with max range across all eyes, then classifies each candidate
+- **Backward compatibility**: Old champion files with `"sensors"` array still load via the legacy `SensorySystem` path. `4thruster_foodonly_simple_boid.json` untouched
+
+**16-eye layout:**
+
+| Region | Eyes | Center angles | Arc width |
+|--------|------|--------------|-----------|
+| Front | 0–4 | 0°, ±18°, ±36° | 18° each |
+| Mid-flank | 5–8 | ±58.5°, ±81° | 27° each |
+| Rear-flank | 9–12 | ±112.5°, ±139.5° | 27° each |
+| Rear | 13–15 | ±166.5°, 180° | 27° each |
+
+**New types added to `sensor.h`:**
+
+```cpp
+enum class SensorChannel { Food, Same, Opposite };
+
+struct EyeSpec {
+    int id = 0;
+    float center_angle = 0;   // radians, body frame
+    float arc_width = 0;      // radians
+    float max_range = 0;      // world units
+};
+
+struct CompoundEyeConfig {
+    std::vector<EyeSpec> eyes;
+    std::vector<SensorChannel> channels;
+    bool has_speed_sensor = true;
+    int total_inputs() const;  // eyes.size() * channels.size() + speed
+};
+```
+
+**Output layout:** `[eye0_food, eye0_same, eye0_opp, eye1_food, eye1_same, eye1_opp, ..., speed]`
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/sensor.h` | Added `SensorChannel` enum, `EyeSpec` struct, `CompoundEyeConfig` struct with `total_inputs()` |
+| `src/simulation/sensory_system.h` | Dual-mode interface: legacy constructor + compound-eye constructor, `is_compound()`, `compound_config()`, `perceive_compound()` |
+| `src/simulation/sensory_system.cpp` | Added compound-eye constructor, `input_count()` dispatch, `perceive()` dispatch, full `perceive_compound()` implementation with single grid query, channel gating via `config.enabled_channels` |
+| `src/simulation/world.h` | Added `std::vector<SensorChannel> enabled_channels` to `WorldConfig` (defaults to all three) |
+| `src/io/sim_config.cpp` | Parse `"sensors"` section with `"channels"` array |
+| `src/io/boid_spec.h` | Added `std::optional<CompoundEyeConfig> compound_eyes` to `BoidSpec`, `sensor_input_count()` declaration |
+| `src/io/boid_spec.cpp` | Dual-format load/save: `"compoundEyes"` key → compound path, else `"sensors"` → legacy. `create_boid_from_spec()` constructs appropriate `SensorySystem`. Added `sensor_input_count()` helper |
+| `src/main.cpp` | Replaced `spec.sensors.size()` with `sensor_input_count(spec)` for NEAT genome creation |
+| `src/headless_main.cpp` | Same `sensor_input_count()` update |
+| `src/display/renderer.h` | Added `draw_one_arc()` private method |
+| `src/display/renderer.cpp` | Refactored `draw_sensor_arcs()`: compound path iterates eyes with max-signal-across-channels colouring; legacy path uses extracted `draw_one_arc()` helper |
+| `data/simple_boid.json` | Replaced `"sensors"` array with `"compoundEyes"` object (16 eyes, 3 channels, speed sensor). Type stays `"prey"` |
+| `data/simple_predator.json` | Same compound-eye format as prey. Only `"type": "predator"` differs |
+| `data/sim_config.json` | Added `"sensors": { "channels": ["food", "same", "opposite"] }` |
+| `tests/test_sensor.cpp` | 9 new compound-eye tests: total_inputs, food/same/opposite channel detection, multi-eye output layout, disabled channels, arc filtering, speed sensor, toroidal detection |
+| `tests/test_boid_spec.cpp` | Updated existing tests for compound-eye format (16 eyes, 49 inputs). Added 2 new tests: compound-eye round-trip, `sensor_input_count()` legacy vs compound |
+| `tests/test_boid_brain.cpp` | Updated all `NeatGenome::minimal()` calls to use `sensor_input_count(spec)` instead of hardcoded 10. Updated output node index references (`nodes[n_inputs]` instead of `nodes[10]`) |
+
+**New JSON spec format:**
+
+```json
+"compoundEyes": {
+    "eyes": [
+        {"id": 0, "centerAngleDeg": 0, "arcWidthDeg": 18, "maxRange": 100},
+        ...
+    ],
+    "channels": ["food", "same", "opposite"],
+    "speedSensor": true
+}
+```
+
+**Backward compatibility verified:** Headless smoke test with `data/4thruster_foodonly_simple_boid.json` (legacy 11-sensor format) runs successfully. Existing dual-evolution tests with programmatic legacy specs (`make_prey_spec()`, `make_predator_spec()`) pass unchanged.
+
+**221 tests, all passing** (210 previous + 9 compound-eye sensor + 2 compound-eye spec).

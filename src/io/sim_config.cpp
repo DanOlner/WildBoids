@@ -68,6 +68,20 @@ SimConfig load_sim_config(const std::string& path) {
         cfg.world.mouth_require_approach = m.value("requireApproach", cfg.world.mouth_require_approach);
     }
 
+    // Sensor channels
+    if (j.contains("sensors")) {
+        const auto& s = j["sensors"];
+        if (s.contains("channels")) {
+            cfg.world.enabled_channels.clear();
+            for (const auto& ch : s["channels"]) {
+                std::string name = ch.get<std::string>();
+                if (name == "food") cfg.world.enabled_channels.push_back(SensorChannel::Food);
+                else if (name == "same") cfg.world.enabled_channels.push_back(SensorChannel::Same);
+                else if (name == "opposite") cfg.world.enabled_channels.push_back(SensorChannel::Opposite);
+            }
+        }
+    }
+
     // Energy
     if (j.contains("energy")) {
         const auto& e = j["energy"];

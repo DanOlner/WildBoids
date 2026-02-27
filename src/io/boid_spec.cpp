@@ -75,6 +75,27 @@ static std::string activation_fn_to_string(ActivationFn fn) {
     return "linear";
 }
 
+static SensorChannel parse_sensor_channel(const std::string& s) {
+    if (s == "food") return SensorChannel::Food;
+    if (s == "same") return SensorChannel::Same;
+    if (s == "opposite") return SensorChannel::Opposite;
+    return SensorChannel::Food;
+}
+
+static std::string sensor_channel_to_string(SensorChannel ch) {
+    switch (ch) {
+        case SensorChannel::Food:     return "food";
+        case SensorChannel::Same:     return "same";
+        case SensorChannel::Opposite: return "opposite";
+    }
+    return "food";
+}
+
+int sensor_input_count(const BoidSpec& spec) {
+    if (spec.compound_eyes.has_value()) return spec.compound_eyes->total_inputs();
+    return static_cast<int>(spec.sensors.size());
+}
+
 BoidSpec load_boid_spec(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -100,8 +121,29 @@ BoidSpec load_boid_spec(const std::string& path) {
         spec.thrusters.push_back(ts);
     }
 
-    // Sensors are optional — old specs without them still load fine
-    if (j.contains("sensors")) {
+    // Compound eyes take precedence over legacy sensors
+    if (j.contains("compoundEyes")) {
+        CompoundEyeConfig cfg;
+        const auto& jce = j.at("compoundEyes");
+
+        for (const auto& je : jce.at("eyes")) {
+            EyeSpec eye;
+            eye.id = je.at("id").get<int>();
+            eye.center_angle = je.at("centerAngleDeg").get<float>() * DEG_TO_RAD;
+            eye.arc_width = je.at("arcWidthDeg").get<float>() * DEG_TO_RAD;
+            eye.max_range = je.at("maxRange").get<float>();
+            cfg.eyes.push_back(eye);
+        }
+
+        for (const auto& jch : jce.at("channels")) {
+            cfg.channels.push_back(parse_sensor_channel(jch.get<std::string>()));
+        }
+
+        cfg.has_speed_sensor = jce.value("speedSensor", true);
+        spec.compound_eyes = std::move(cfg);
+    }
+    // Legacy sensors — old specs without compound eyes still load fine
+    else if (j.contains("sensors")) {
         for (const auto& js : j.at("sensors")) {
             SensorSpec ss;
             ss.id = js.at("id").get<int>();
@@ -160,7 +202,10 @@ Boid create_boid_from_spec(const BoidSpec& spec) {
         boid.thrusters.push_back(t);
     }
 
-    if (!spec.sensors.empty()) {
+    if (spec.compound_eyes.has_value()) {
+        boid.sensors.emplace(*spec.compound_eyes);
+        boid.sensor_outputs.resize(boid.sensors->input_count(), 0.0f);
+    } else if (!spec.sensors.empty()) {
         boid.sensors.emplace(spec.sensors);
         boid.sensor_outputs.resize(boid.sensors->input_count(), 0.0f);
     }
@@ -193,7 +238,26 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
         j["thrusters"].push_back(jt);
     }
 
-    if (!spec.sensors.empty()) {
+    if (spec.compound_eyes.has_value()) {
+        json jce;
+        jce["eyes"] = json::array();
+        for (const auto& eye : spec.compound_eyes->eyes) {
+            json je;
+            je["id"] = eye.id;
+            je["centerAngleDeg"] = eye.center_angle * RAD_TO_DEG;
+            je["arcWidthDeg"] = eye.arc_width * RAD_TO_DEG;
+            je["maxRange"] = eye.max_range;
+            jce["eyes"].push_back(je);
+        }
+
+        jce["channels"] = json::array();
+        for (auto ch : spec.compound_eyes->channels) {
+            jce["channels"].push_back(sensor_channel_to_string(ch));
+        }
+
+        jce["speedSensor"] = spec.compound_eyes->has_speed_sensor;
+        j["compoundEyes"] = jce;
+    } else if (!spec.sensors.empty()) {
         j["sensors"] = json::array();
         for (const auto& ss : spec.sensors) {
             json js;

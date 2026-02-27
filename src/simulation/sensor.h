@@ -1,9 +1,13 @@
 #pragma once
 
 #include <cmath>
+#include <vector>
 
 enum class EntityFilter { Prey, Predator, Any, Food, Speed };
 enum class SignalType { NearestDistance, SectorDensity };
+
+// Channels for compound-eye sensors
+enum class SensorChannel { Food, Same, Opposite };
 
 struct SensorSpec {
     int id = 0;
@@ -12,6 +16,26 @@ struct SensorSpec {
     float max_range = 0;      // detection radius (world units)
     EntityFilter filter = EntityFilter::Any;
     SignalType signal_type = SignalType::NearestDistance;
+};
+
+// A single compound eye: arc position + range, produces multiple channel outputs
+struct EyeSpec {
+    int id = 0;
+    float center_angle = 0;   // radians, body frame
+    float arc_width = 0;      // radians
+    float max_range = 0;      // world units
+};
+
+// Full compound-eye sensor configuration
+struct CompoundEyeConfig {
+    std::vector<EyeSpec> eyes;
+    std::vector<SensorChannel> channels;  // which channels are active
+    bool has_speed_sensor = true;
+
+    int total_inputs() const {
+        return static_cast<int>(eyes.size()) * static_cast<int>(channels.size())
+               + (has_speed_sensor ? 1 : 0);
+    }
 };
 
 // Check whether an angle falls within a symmetric arc around center_angle.

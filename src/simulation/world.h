@@ -2,6 +2,7 @@
 
 #include "simulation/boid.h"
 #include "simulation/food_source.h"
+#include "simulation/sensor.h"
 #include "simulation/spatial_grid.h"
 #include <vector>
 #include <random>
@@ -44,6 +45,12 @@ struct WorldConfig {
     bool mouth_enabled = false;
     float mouth_arc_width = 3.14159265f;  // radians (default π = 180°, front hemisphere)
     bool mouth_require_approach = true;   // velocity dot-product check
+
+    // Sensor channel enable/disable (compound eyes only)
+    // Disabled channels produce 0.0 — NEAT inputs still exist but carry no information
+    std::vector<SensorChannel> enabled_channels = {
+        SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite
+    };
 };
 
 class World {

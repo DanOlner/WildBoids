@@ -227,7 +227,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int prey_n_sensors = static_cast<int>(prey_spec.sensors.size());
+    int prey_n_sensors = sensor_input_count(prey_spec);
     int prey_n_thrusters = static_cast<int>(prey_spec.thrusters.size());
 
     // Create seed genome and prey population
@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        int pred_n_sensors = static_cast<int>(predator_spec.sensors.size());
+        int pred_n_sensors = sensor_input_count(predator_spec);
         int pred_n_thrusters = static_cast<int>(predator_spec.thrusters.size());
 
         // Use predator population size if specified, otherwise use same as prey

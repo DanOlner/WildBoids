@@ -23,9 +23,13 @@ struct BoidSpec {
     float moment_of_inertia = 1.0f;
     float initial_energy = 100.0f;
     std::vector<ThrusterSpec> thrusters;
-    std::vector<SensorSpec> sensors;  // optional — empty if no sensors
+    std::vector<SensorSpec> sensors;                // legacy flat sensor list
+    std::optional<CompoundEyeConfig> compound_eyes; // new compound-eye format
     std::optional<NeatGenome> genome; // optional — absent for boids without a brain
 };
+
+// Returns total NEAT input count from whichever sensor format is present.
+int sensor_input_count(const BoidSpec& spec);
 
 // Load a boid spec from a JSON file. Throws on parse/validation error.
 BoidSpec load_boid_spec(const std::string& path);

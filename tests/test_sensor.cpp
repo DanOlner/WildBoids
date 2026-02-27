@@ -509,3 +509,263 @@ TEST_CASE("Speed sensor: integrated via World::step()", "[sensor][proprioception
     // 30/50 = 0.6 (approximately — dt=0 so velocity unchanged)
     CHECK_THAT(world.get_boids()[0].sensor_outputs[0], WithinAbs(0.6f, 0.02f));
 }
+
+// ---- Compound-eye sensor tests ----
+
+// Helper: make a compound-eye WorldConfig with specified channels enabled
+static WorldConfig make_compound_config(float world_size = 800.0f,
+                                          std::vector<SensorChannel> channels = {
+                                              SensorChannel::Food,
+                                              SensorChannel::Same,
+                                              SensorChannel::Opposite
+                                          }) {
+    WorldConfig config;
+    config.width = world_size;
+    config.height = world_size;
+    config.toroidal = true;
+    config.grid_cell_size = 100.0f;
+    config.max_speed = 50.0f;
+    config.enabled_channels = std::move(channels);
+    return config;
+}
+
+// Helper: make a simple compound-eye config with N eyes, all channels
+static CompoundEyeConfig make_simple_eyes(int n_eyes, float arc_deg, float max_range) {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    float arc_rad = arc_deg * DEG;
+    for (int i = 0; i < n_eyes; ++i) {
+        EyeSpec eye;
+        eye.id = i;
+        // Spread evenly around circle
+        eye.center_angle = (2.0f * PI * i) / static_cast<float>(n_eyes);
+        if (eye.center_angle > PI) eye.center_angle -= 2.0f * PI; // wrap to [-π, π]
+        eye.arc_width = arc_rad;
+        eye.max_range = max_range;
+        cfg.eyes.push_back(eye);
+    }
+    return cfg;
+}
+
+TEST_CASE("Compound eye: total_inputs() correct", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    for (int i = 0; i < 4; ++i) {
+        cfg.eyes.push_back(EyeSpec{i, 0, 90 * DEG, 100});
+    }
+    // 4 eyes × 3 channels + 1 speed = 13
+    CHECK(cfg.total_inputs() == 13);
+
+    cfg.has_speed_sensor = false;
+    CHECK(cfg.total_inputs() == 12);
+}
+
+TEST_CASE("Compound eye: food channel detects food ahead", "[sensor][compound]") {
+    // Single forward eye, all channels
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    auto boids = make_boids(make_boid({400, 400}));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    world.add_boid(std::move(boids[0]));
+    world.add_food(Food{{400, 450}, 10.0f}); // 50 units ahead
+    world.step(0);
+
+    // 1 eye × 3 channels = 3 outputs
+    float outputs[3] = {0, 0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Food channel (index 0): 1 - 50/100 = 0.5
+    CHECK_THAT(outputs[0], WithinAbs(0.5f, 0.02f));
+    // Same channel: no same-type boids
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+    // Opposite channel: no opposite-type boids
+    CHECK_THAT(outputs[2], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: same channel detects same type", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    // Self is prey, other is also prey (same type) — 50 units ahead
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 450}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[3] = {0, 0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f)); // food: nothing
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));  // same: prey sees prey
+    CHECK_THAT(outputs[2], WithinAbs(0.0f, 1e-6f));  // opposite: nothing
+}
+
+TEST_CASE("Compound eye: opposite channel detects different type", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    // Self is prey, other is predator (opposite type) — 50 units ahead
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 450}, 0, "predator"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[3] = {0, 0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f)); // food: nothing
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f)); // same: nothing
+    CHECK_THAT(outputs[2], WithinAbs(0.5f, 0.02f));  // opposite: predator detected
+}
+
+TEST_CASE("Compound eye: multi-eye output layout", "[sensor][compound]") {
+    // 2 eyes: forward (0°) and right (-90°), 3 channels + speed
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 36 * DEG, 100});       // forward
+    cfg.eyes.push_back(EyeSpec{1, -PI / 2, 36 * DEG, 100}); // right
+    SensorySystem sys(cfg);
+
+    CHECK(sys.input_count() == 7); // 2 × 3 + 1
+
+    // Prey at (400,400), food at (400,450) directly ahead
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    world.add_boid(std::move(boids[0]));
+    world.add_food(Food{{400, 450}, 10.0f});
+    world.step(0);
+
+    float outputs[7] = {};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Eye 0 (forward): food channel [0] should fire
+    CHECK_THAT(outputs[0], WithinAbs(0.5f, 0.02f)); // eye0 food
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f)); // eye0 same
+    CHECK_THAT(outputs[2], WithinAbs(0.0f, 1e-6f)); // eye0 opposite
+    // Eye 1 (right): nothing to the right
+    CHECK_THAT(outputs[3], WithinAbs(0.0f, 1e-6f)); // eye1 food
+    CHECK_THAT(outputs[4], WithinAbs(0.0f, 1e-6f)); // eye1 same
+    CHECK_THAT(outputs[5], WithinAbs(0.0f, 1e-6f)); // eye1 opposite
+    // Speed sensor (stationary)
+    CHECK_THAT(outputs[6], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: disabled channels produce zero", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    // Prey boid with both food and same-type boid ahead
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 450}, 0, "prey"));
+    // Only food channel enabled
+    WorldConfig wc = make_compound_config(800.0f, {SensorChannel::Food});
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.add_food(Food{{400, 460}, 10.0f});
+    world.step(0);
+
+    float outputs[3] = {0, 0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Food channel fires
+    CHECK(outputs[0] > 0.0f);
+    // Same and opposite disabled — should be zero despite same-type boid present
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+    CHECK_THAT(outputs[2], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: arc filtering per eye", "[sensor][compound]") {
+    // Two narrow eyes: one forward, one backward
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 36 * DEG, 100});       // forward
+    cfg.eyes.push_back(EyeSpec{1, PI, 36 * DEG, 100});       // backward
+    SensorySystem sys(cfg);
+
+    // Food directly ahead
+    auto boids = make_boids(make_boid({400, 400}));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    world.add_boid(std::move(boids[0]));
+    world.add_food(Food{{400, 450}, 10.0f});
+    world.step(0);
+
+    float outputs[2] = {0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Forward eye detects food
+    CHECK_THAT(outputs[0], WithinAbs(0.5f, 0.02f));
+    // Backward eye does not
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: speed sensor appended at end", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    CHECK(sys.input_count() == 2); // 1 eye × 1 channel + 1 speed
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 25.0f};
+
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[2] = {0, 0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Eye output: no food
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Speed: 25/50 = 0.5
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Compound eye: toroidal detection across world edge", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Same};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 36 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    // Prey near top edge, another prey near bottom edge (wraps to ~20 units ahead)
+    auto boids = make_boids(make_boid({400, 790}, 0, "prey"),
+                              make_boid({400, 10}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[1] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Distance: 800 - 790 + 10 = 20, signal: 1 - 20/100 = 0.8
+    CHECK_THAT(outputs[0], WithinAbs(0.8f, 0.02f));
+}

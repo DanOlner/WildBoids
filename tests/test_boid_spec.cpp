@@ -38,16 +38,15 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.thrusters[4].label == "strafe_left");
     CHECK(spec.thrusters[5].label == "strafe_right");
 
-    // Sensors
-    REQUIRE(spec.sensors.size() == 11);
-    CHECK(spec.sensors[0].id == 0);
-    CHECK_THAT(spec.sensors[0].center_angle, WithinAbs(0.0f, 1e-4f));
-    CHECK(spec.sensors[0].filter == EntityFilter::Any);
-    CHECK(spec.sensors[0].signal_type == SignalType::NearestDistance);
-
-    // Speed (proprioceptive) sensor
-    CHECK(spec.sensors[10].id == 10);
-    CHECK(spec.sensors[10].filter == EntityFilter::Speed);
+    // Compound eyes (16 eyes × 3 channels + 1 speed = 49 inputs)
+    REQUIRE(spec.compound_eyes.has_value());
+    CHECK(spec.sensors.empty());
+    CHECK(spec.compound_eyes->eyes.size() == 16);
+    CHECK(spec.compound_eyes->channels.size() == 3);
+    CHECK(spec.compound_eyes->has_speed_sensor == true);
+    CHECK(spec.compound_eyes->eyes[0].id == 0);
+    CHECK_THAT(spec.compound_eyes->eyes[0].center_angle, WithinAbs(0.0f, 1e-4f));
+    CHECK(sensor_input_count(spec) == 49);
 }
 
 TEST_CASE("Create boid from spec", "[boid_spec]") {
@@ -65,10 +64,11 @@ TEST_CASE("Create boid from spec", "[boid_spec]") {
         CHECK_THAT(t.power, WithinAbs(0.0f, 1e-6f));
     }
 
-    // Sensors wired up
+    // Compound-eye sensors wired up
     REQUIRE(boid.sensors.has_value());
-    CHECK(boid.sensors->input_count() == 11);
-    CHECK(boid.sensor_outputs.size() == 11);
+    CHECK(boid.sensors->is_compound());
+    CHECK(boid.sensors->input_count() == 49);
+    CHECK(boid.sensor_outputs.size() == 49);
 }
 
 TEST_CASE("Round-trip save and reload", "[boid_spec]") {
@@ -90,19 +90,20 @@ TEST_CASE("Round-trip save and reload", "[boid_spec]") {
                    WithinAbs(original.thrusters[i].max_thrust, 1e-4f));
     }
 
-    // Sensors round-trip
-    REQUIRE(reloaded.sensors.size() == original.sensors.size());
-    for (size_t i = 0; i < original.sensors.size(); i++) {
-        CHECK(reloaded.sensors[i].id == original.sensors[i].id);
-        CHECK_THAT(reloaded.sensors[i].center_angle,
-                   WithinAbs(original.sensors[i].center_angle, 1e-3f));
-        CHECK_THAT(reloaded.sensors[i].arc_width,
-                   WithinAbs(original.sensors[i].arc_width, 1e-3f));
-        CHECK_THAT(reloaded.sensors[i].max_range,
-                   WithinAbs(original.sensors[i].max_range, 1e-4f));
-        CHECK(reloaded.sensors[i].filter == original.sensors[i].filter);
-        CHECK(reloaded.sensors[i].signal_type == original.sensors[i].signal_type);
+    // Compound eyes round-trip
+    REQUIRE(reloaded.compound_eyes.has_value());
+    REQUIRE(original.compound_eyes.has_value());
+    const auto& re = reloaded.compound_eyes->eyes;
+    const auto& oe = original.compound_eyes->eyes;
+    REQUIRE(re.size() == oe.size());
+    for (size_t i = 0; i < oe.size(); i++) {
+        CHECK(re[i].id == oe[i].id);
+        CHECK_THAT(re[i].center_angle, WithinAbs(oe[i].center_angle, 1e-3f));
+        CHECK_THAT(re[i].arc_width, WithinAbs(oe[i].arc_width, 1e-3f));
+        CHECK_THAT(re[i].max_range, WithinAbs(oe[i].max_range, 1e-4f));
     }
+    CHECK(reloaded.compound_eyes->channels.size() == original.compound_eyes->channels.size());
+    CHECK(reloaded.compound_eyes->has_speed_sensor == original.compound_eyes->has_speed_sensor);
 
     // Clean up
     std::filesystem::remove(tmp_path);
@@ -185,6 +186,86 @@ TEST_CASE("Genome round-trip: network produces identical outputs", "[boid_spec]"
     }
 
     std::filesystem::remove(tmp_path);
+}
+
+TEST_CASE("Compound-eye spec round-trip: save and reload", "[boid_spec][compound]") {
+    static constexpr float DEG = static_cast<float>(M_PI) / 180.0f;
+
+    BoidSpec spec;
+    spec.version = "0.2";
+    spec.type = "prey";
+    spec.mass = 1.0f;
+    spec.moment_of_inertia = 0.5f;
+    spec.initial_energy = 100.0f;
+
+    // Add thrusters
+    ThrusterSpec t;
+    t.id = 0; t.label = "rear"; t.position = {0, -0.5f};
+    t.direction = {0, 1}; t.max_thrust = 5.0f;
+    spec.thrusters.push_back(t);
+
+    // Build compound eyes: 3 eyes, 3 channels, speed sensor
+    CompoundEyeConfig cfg;
+    cfg.eyes.push_back(EyeSpec{0, 0, 36 * DEG, 100});
+    cfg.eyes.push_back(EyeSpec{1, -60 * DEG, 45 * DEG, 80});
+    cfg.eyes.push_back(EyeSpec{2, 60 * DEG, 45 * DEG, 80});
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    spec.compound_eyes = cfg;
+
+    std::string tmp_path = "test_compound_roundtrip.json";
+    save_boid_spec(spec, tmp_path);
+
+    BoidSpec reloaded = load_boid_spec(tmp_path);
+
+    // Should have compound eyes, not legacy sensors
+    REQUIRE(reloaded.compound_eyes.has_value());
+    CHECK(reloaded.sensors.empty());
+
+    const auto& rc = *reloaded.compound_eyes;
+    REQUIRE(rc.eyes.size() == 3);
+    REQUIRE(rc.channels.size() == 3);
+    CHECK(rc.has_speed_sensor == true);
+
+    // Check eye values round-trip (degrees ↔ radians conversion)
+    for (size_t i = 0; i < cfg.eyes.size(); ++i) {
+        CHECK(rc.eyes[i].id == cfg.eyes[i].id);
+        CHECK_THAT(rc.eyes[i].center_angle, WithinAbs(cfg.eyes[i].center_angle, 1e-3f));
+        CHECK_THAT(rc.eyes[i].arc_width, WithinAbs(cfg.eyes[i].arc_width, 1e-3f));
+        CHECK_THAT(rc.eyes[i].max_range, WithinAbs(cfg.eyes[i].max_range, 1e-4f));
+    }
+
+    // Check channels round-trip
+    CHECK(rc.channels[0] == SensorChannel::Food);
+    CHECK(rc.channels[1] == SensorChannel::Same);
+    CHECK(rc.channels[2] == SensorChannel::Opposite);
+
+    // Check total inputs
+    CHECK(sensor_input_count(reloaded) == 10); // 3 × 3 + 1
+
+    // Create boid from compound spec — should have compound SensorySystem
+    Boid boid = create_boid_from_spec(reloaded);
+    REQUIRE(boid.sensors.has_value());
+    CHECK(boid.sensors->is_compound());
+    CHECK(boid.sensors->input_count() == 10);
+    CHECK(boid.sensor_outputs.size() == 10);
+
+    std::filesystem::remove(tmp_path);
+}
+
+TEST_CASE("sensor_input_count: legacy vs compound", "[boid_spec][compound]") {
+    BoidSpec legacy;
+    legacy.sensors.push_back(SensorSpec{0, 0, 0, 100, EntityFilter::Any, SignalType::NearestDistance});
+    legacy.sensors.push_back(SensorSpec{1, 0, 0, 100, EntityFilter::Food, SignalType::NearestDistance});
+    CHECK(sensor_input_count(legacy) == 2);
+
+    BoidSpec compound;
+    CompoundEyeConfig cfg;
+    cfg.eyes.push_back(EyeSpec{0, 0, 1.0f, 100});
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same};
+    cfg.has_speed_sensor = true;
+    compound.compound_eyes = cfg;
+    CHECK(sensor_input_count(compound) == 3); // 1 × 2 + 1
 }
 
 TEST_CASE("Spec to boid integration: fire rear thruster and move", "[boid_spec]") {

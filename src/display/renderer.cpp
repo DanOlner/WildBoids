@@ -181,57 +181,72 @@ void Renderer::draw_food(const std::vector<Food>& food, const WorldConfig& confi
     }
 }
 
+// Draw a single sensor arc with given geometry and signal strength
+void Renderer::draw_one_arc(const Boid& boid, const WorldConfig& config,
+                             float center_angle, float arc_width, float max_range, float signal) {
+    Uint8 r = static_cast<Uint8>(signal * 200);
+    Uint8 g = static_cast<Uint8>(80 + signal * 175);
+    Uint8 b = static_cast<Uint8>(120 * (1.0f - signal));
+    SDL_SetRenderDrawColor(renderer_, r, g, b, 180);
+
+    float world_angle = boid.body.angle;
+    float arc_start = world_angle + center_angle - arc_width * 0.5f;
+    float arc_end   = world_angle + center_angle + arc_width * 0.5f;
+    Vec2 pos = boid.body.position;
+
+    // Radial lines
+    Vec2 start_dir = Vec2{0, max_range}.rotated(arc_start);
+    SDL_RenderLine(renderer_,
+        world_to_screen_x(pos.x, config), world_to_screen_y(pos.y, config),
+        world_to_screen_x(pos.x + start_dir.x, config),
+        world_to_screen_y(pos.y + start_dir.y, config));
+
+    Vec2 end_dir = Vec2{0, max_range}.rotated(arc_end);
+    SDL_RenderLine(renderer_,
+        world_to_screen_x(pos.x, config), world_to_screen_y(pos.y, config),
+        world_to_screen_x(pos.x + end_dir.x, config),
+        world_to_screen_y(pos.y + end_dir.y, config));
+
+    // Arc curve
+    float step = (arc_end - arc_start) / SENSOR_ARC_SEGMENTS;
+    for (int seg = 0; seg < SENSOR_ARC_SEGMENTS; ++seg) {
+        float a0 = arc_start + step * seg;
+        float a1 = arc_start + step * (seg + 1);
+        Vec2 p0 = pos + Vec2{0, max_range}.rotated(a0);
+        Vec2 p1 = pos + Vec2{0, max_range}.rotated(a1);
+        SDL_RenderLine(renderer_,
+            world_to_screen_x(p0.x, config), world_to_screen_y(p0.y, config),
+            world_to_screen_x(p1.x, config), world_to_screen_y(p1.y, config));
+    }
+}
+
 void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
     if (!boid.sensors) return;
 
-    const auto& specs = boid.sensors->specs();
-    for (int si = 0; si < static_cast<int>(specs.size()); ++si) {
-        const auto& spec = specs[si];
-        float signal = (si < static_cast<int>(boid.sensor_outputs.size()))
-                       ? boid.sensor_outputs[si] : 0.0f;
+    if (boid.sensors->is_compound()) {
+        // Compound eyes: one arc per eye, colour by max signal across channels
+        const auto& cfg = boid.sensors->compound_config();
+        int n_channels = static_cast<int>(cfg.channels.size());
 
-        // Colour: dim cyan when no signal, bright yellow-green when detecting
-        Uint8 r = static_cast<Uint8>(signal * 200);
-        Uint8 g = static_cast<Uint8>(80 + signal * 175);
-        Uint8 b = static_cast<Uint8>(120 * (1.0f - signal));
-        SDL_SetRenderDrawColor(renderer_, r, g, b, 180);
-
-        float world_angle = boid.body.angle; // boid heading
-        float arc_start = world_angle + spec.center_angle - spec.arc_width * 0.5f;
-        float arc_end   = world_angle + spec.center_angle + spec.arc_width * 0.5f;
-        float range = spec.max_range;
-
-        Vec2 pos = boid.body.position;
-
-        // Draw arc outline: two radial lines + arc segments
-        // Start radial line
-        Vec2 start_dir = Vec2{0, range}.rotated(arc_start);
-        SDL_RenderLine(renderer_,
-            world_to_screen_x(pos.x, config),
-            world_to_screen_y(pos.y, config),
-            world_to_screen_x(pos.x + start_dir.x, config),
-            world_to_screen_y(pos.y + start_dir.y, config));
-
-        // End radial line
-        Vec2 end_dir = Vec2{0, range}.rotated(arc_end);
-        SDL_RenderLine(renderer_,
-            world_to_screen_x(pos.x, config),
-            world_to_screen_y(pos.y, config),
-            world_to_screen_x(pos.x + end_dir.x, config),
-            world_to_screen_y(pos.y + end_dir.y, config));
-
-        // Arc curve segments
-        float step = (arc_end - arc_start) / SENSOR_ARC_SEGMENTS;
-        for (int seg = 0; seg < SENSOR_ARC_SEGMENTS; ++seg) {
-            float a0 = arc_start + step * seg;
-            float a1 = arc_start + step * (seg + 1);
-            Vec2 p0 = pos + Vec2{0, range}.rotated(a0);
-            Vec2 p1 = pos + Vec2{0, range}.rotated(a1);
-            SDL_RenderLine(renderer_,
-                world_to_screen_x(p0.x, config),
-                world_to_screen_y(p0.y, config),
-                world_to_screen_x(p1.x, config),
-                world_to_screen_y(p1.y, config));
+        for (int e = 0; e < static_cast<int>(cfg.eyes.size()); ++e) {
+            const auto& eye = cfg.eyes[e];
+            float max_signal = 0.0f;
+            for (int c = 0; c < n_channels; ++c) {
+                int idx = e * n_channels + c;
+                if (idx < static_cast<int>(boid.sensor_outputs.size())) {
+                    max_signal = std::max(max_signal, boid.sensor_outputs[idx]);
+                }
+            }
+            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, max_signal);
+        }
+    } else {
+        // Legacy sensor arcs
+        const auto& specs = boid.sensors->specs();
+        for (int si = 0; si < static_cast<int>(specs.size()); ++si) {
+            const auto& spec = specs[si];
+            float signal = (si < static_cast<int>(boid.sensor_outputs.size()))
+                           ? boid.sensor_outputs[si] : 0.0f;
+            draw_one_arc(boid, config, spec.center_angle, spec.arc_width, spec.max_range, signal);
         }
     }
 }

@@ -60,94 +60,26 @@
             "maxThrust": 3.0
         }
     ],
-    "sensors": [
-        {
-            "id": 0,
-            "centerAngleDeg": 0,
-            "arcWidthDeg": 36,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 1,
-            "centerAngleDeg": -36,
-            "arcWidthDeg": 36,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 2,
-            "centerAngleDeg": 36,
-            "arcWidthDeg": 36,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 3,
-            "centerAngleDeg": -72,
-            "arcWidthDeg": 36,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 4,
-            "centerAngleDeg": 72,
-            "arcWidthDeg": 36,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 5,
-            "centerAngleDeg": -135,
-            "arcWidthDeg": 90,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 6,
-            "centerAngleDeg": 135,
-            "arcWidthDeg": 90,
-            "maxRange": 100,
-            "filter": "any",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 7,
-            "centerAngleDeg": 0,
-            "arcWidthDeg": 120,
-            "maxRange": 120,
-            "filter": "food",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 8,
-            "centerAngleDeg": -120,
-            "arcWidthDeg": 120,
-            "maxRange": 120,
-            "filter": "food",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 9,
-            "centerAngleDeg": 120,
-            "arcWidthDeg": 120,
-            "maxRange": 120,
-            "filter": "food",
-            "signalType": "nearestDistance"
-        },
-        {
-            "id": 10,
-            "centerAngleDeg": 0,
-            "arcWidthDeg": 0,
-            "maxRange": 0,
-            "filter": "speed",
-            "signalType": "nearestDistance"
-        }
-    ]
+    "compoundEyes": {
+        "eyes": [
+            { "id": 0,  "centerAngleDeg": 0,      "arcWidthDeg": 18, "maxRange": 100 },
+            { "id": 1,  "centerAngleDeg": -18,     "arcWidthDeg": 18, "maxRange": 100 },
+            { "id": 2,  "centerAngleDeg": 18,      "arcWidthDeg": 18, "maxRange": 100 },
+            { "id": 3,  "centerAngleDeg": -36,     "arcWidthDeg": 18, "maxRange": 100 },
+            { "id": 4,  "centerAngleDeg": 36,      "arcWidthDeg": 18, "maxRange": 100 },
+            { "id": 5,  "centerAngleDeg": -58.5,   "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 6,  "centerAngleDeg": 58.5,    "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 7,  "centerAngleDeg": -81,     "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 8,  "centerAngleDeg": 81,      "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 9,  "centerAngleDeg": -112.5,  "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 10, "centerAngleDeg": 112.5,   "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 11, "centerAngleDeg": -139.5,  "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 12, "centerAngleDeg": 139.5,   "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 13, "centerAngleDeg": -166.5,  "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 14, "centerAngleDeg": 166.5,   "arcWidthDeg": 27, "maxRange": 100 },
+            { "id": 15, "centerAngleDeg": 180,     "arcWidthDeg": 27, "maxRange": 100 }
+        ],
+        "channels": ["food", "same", "opposite"],
+        "speedSensor": true
+    }
 }

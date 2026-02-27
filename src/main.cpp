@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
   } else {
     // Default mode: random NEAT weights
     std::normal_distribution<float> weight_dist(0.0f, 1.0f);
-    int n_sensors = static_cast<int>(prey_spec.sensors.size());
+    int n_sensors = sensor_input_count(prey_spec);
     int n_thrusters = static_cast<int>(prey_spec.thrusters.size());
 
     int next_innov = 1;
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
     } else {
       // Random NEAT weights for predators
       std::normal_distribution<float> weight_dist(0.0f, 1.0f);
-      int n_sensors = static_cast<int>(predator_spec.sensors.size());
+      int n_sensors = sensor_input_count(predator_spec);
       int n_thrusters = static_cast<int>(predator_spec.thrusters.size());
 
       int next_innov = 1;
