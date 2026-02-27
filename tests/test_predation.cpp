@@ -158,3 +158,78 @@ TEST_CASE("Predation: predator energy and fitness track correctly over time", "[
     CHECK(world.get_boids()[1].alive);
     CHECK_THAT(world.get_boids()[2].total_energy_gained, WithinAbs(50.0f, 0.01f));
 }
+
+// --- Directional mouth tests ---
+
+TEST_CASE("Predation mouth: predator facing prey and approaching catches", "[predation][mouth]") {
+    auto config = predation_config();
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 3.14159265f;  // 180°
+    config.mouth_require_approach = true;
+    World world(config);
+
+    // Predator at (100,100) facing +Y, moving +Y, prey ahead
+    Boid pred = make_boid_at("predator", {100, 100});
+    pred.body.angle = 0.0f;
+    pred.body.velocity = {0, 5.0f};
+    world.add_boid(make_boid_at("prey", {100, 110}));
+    world.add_boid(std::move(pred));
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(!world.get_boids()[0].alive);  // prey caught
+    CHECK_THAT(world.get_boids()[1].total_energy_gained, WithinAbs(50.0f, 0.01f));
+}
+
+TEST_CASE("Predation mouth: prey behind predator is not caught", "[predation][mouth]") {
+    auto config = predation_config();
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 1.5708f;  // 90° narrow
+    config.mouth_require_approach = false;
+    World world(config);
+
+    // Predator facing +Y, prey behind in -Y
+    Boid pred = make_boid_at("predator", {100, 100});
+    pred.body.angle = 0.0f;
+    world.add_boid(make_boid_at("prey", {100, 90}));
+    world.add_boid(std::move(pred));
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_boids()[0].alive);  // prey survives
+}
+
+TEST_CASE("Predation mouth: predator reversing toward prey does not catch", "[predation][mouth]") {
+    auto config = predation_config();
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 3.14159265f;  // 180°
+    config.mouth_require_approach = true;
+    World world(config);
+
+    // Predator facing +Y but moving -Y (reversing), prey ahead
+    Boid pred = make_boid_at("predator", {100, 100});
+    pred.body.angle = 0.0f;
+    pred.body.velocity = {0, -5.0f};  // moving backwards
+    world.add_boid(make_boid_at("prey", {100, 110}));
+    world.add_boid(std::move(pred));
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_boids()[0].alive);  // prey survives — predator moving away
+}
+
+TEST_CASE("Predation mouth: disabled reverts to omnidirectional catch", "[predation][mouth]") {
+    auto config = predation_config();
+    config.mouth_enabled = false;
+    World world(config);
+
+    // Predator facing +Y, prey behind — should still catch with mouth disabled
+    Boid pred = make_boid_at("predator", {100, 100});
+    pred.body.angle = 0.0f;
+    world.add_boid(make_boid_at("prey", {100, 90}));
+    world.add_boid(std::move(pred));
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(!world.get_boids()[0].alive);  // prey caught — mouth disabled
+}

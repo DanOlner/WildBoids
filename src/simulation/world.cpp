@@ -1,4 +1,5 @@
 #include "simulation/world.h"
+#include "simulation/sensor.h"
 #include "simulation/toroidal.h"
 #include <cmath>
 #include <algorithm>
@@ -137,26 +138,34 @@ void World::check_predation() {
             if (!prey.alive) continue;
             if (prey.type != "prey") continue;
 
-            float dist_sq;
+            Vec2 delta;
             if (config_.toroidal) {
-                dist_sq = toroidal_distance_sq(
-                    predator.body.position, prey.body.position,
-                    config_.width, config_.height);
+                delta = toroidal_delta(predator.body.position, prey.body.position,
+                                       config_.width, config_.height);
             } else {
-                Vec2 d = prey.body.position - predator.body.position;
-                dist_sq = d.length_squared();
+                delta = prey.body.position - predator.body.position;
+            }
+            float dist_sq = delta.length_squared();
+
+            if (dist_sq > catch_radius_sq) continue;
+
+            if (config_.mouth_enabled) {
+                Vec2 body_delta = delta.rotated(-predator.body.angle);
+                float angle = std::atan2(body_delta.x, body_delta.y);
+                if (!angle_in_arc(angle, 0.0f, config_.mouth_arc_width))
+                    continue;
+                if (config_.mouth_require_approach && delta.dot(predator.body.velocity) <= 0.0f)
+                    continue;
             }
 
-            if (dist_sq <= catch_radius_sq) {
-                // Prey dies
-                prey.alive = false;
-                prey.energy = 0.0f;
-                for (auto& t : prey.thrusters) t.power = 0.0f;
+            // Prey dies
+            prey.alive = false;
+            prey.energy = 0.0f;
+            for (auto& t : prey.thrusters) t.power = 0.0f;
 
-                // Predator gains energy
-                predator.energy += config_.predator_catch_energy;
-                predator.total_energy_gained += config_.predator_catch_energy;
-            }
+            // Predator gains energy
+            predator.energy += config_.predator_catch_energy;
+            predator.total_energy_gained += config_.predator_catch_energy;
         }
     }
 }
@@ -171,21 +180,29 @@ void World::check_food_eating() {
         food_.erase(
             std::remove_if(food_.begin(), food_.end(),
                 [&](const Food& f) {
-                    float dist_sq;
+                    Vec2 delta;
                     if (config_.toroidal) {
-                        dist_sq = toroidal_distance_sq(
-                            boid.body.position, f.position,
-                            config_.width, config_.height);
+                        delta = toroidal_delta(boid.body.position, f.position,
+                                               config_.width, config_.height);
                     } else {
-                        Vec2 d = f.position - boid.body.position;
-                        dist_sq = d.length_squared();
+                        delta = f.position - boid.body.position;
                     }
-                    if (dist_sq <= eat_radius_sq) {
-                        boid.energy += f.energy_value;
-                        boid.total_energy_gained += f.energy_value;
-                        return true;  // remove this food
+                    float dist_sq = delta.length_squared();
+
+                    if (dist_sq > eat_radius_sq) return false;
+
+                    if (config_.mouth_enabled) {
+                        Vec2 body_delta = delta.rotated(-boid.body.angle);
+                        float angle = std::atan2(body_delta.x, body_delta.y);
+                        if (!angle_in_arc(angle, 0.0f, config_.mouth_arc_width))
+                            return false;
+                        if (config_.mouth_require_approach && delta.dot(boid.body.velocity) <= 0.0f)
+                            return false;
                     }
-                    return false;
+
+                    boid.energy += f.energy_value;
+                    boid.total_energy_gained += f.energy_value;
+                    return true;  // remove this food
                 }),
             food_.end());
     }

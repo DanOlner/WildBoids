@@ -559,3 +559,38 @@ Added predator boids that catch and eat prey, with dual-population NEAT co-evolu
 ```
 
 **201 tests, all passing** (182 previous + 9 predation + 4 dual evolution + 6 sim_config).
+
+---
+
+### Option K: Directional mouth (201 → 210 tests) [27.2.26]
+
+Added a directional "mouth" mechanic so that eating (food or prey) requires the boid to face the target and be moving toward it. Previously both `check_food_eating()` and `check_predation()` were pure distance checks from the boid's center — any contact from any direction counted. The mouth adds two optional checks:
+
+1. **Arc check** — target must fall within a forward-facing arc (reuses `angle_in_arc()` from the sensor system)
+2. **Velocity dot check** — `dot(velocity, delta_to_target) > 0`, ensuring the boid is approaching, not reversing over the target
+
+Both checks are gated by `config.mouth_enabled` (default `false`), so existing behavior is unchanged unless explicitly enabled.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/world.h` | Added 3 fields to `WorldConfig`: `mouth_enabled`, `mouth_arc_width` (radians, default π = 180°), `mouth_require_approach` (default true) |
+| `src/simulation/world.cpp` | Added `#include "simulation/sensor.h"` for `angle_in_arc()`. Refactored both `check_food_eating()` and `check_predation()` to compute `Vec2 delta` first (via `toroidal_delta` or subtraction), then derive `dist_sq` from it. Added mouth arc + velocity checks after the distance check passes. |
+| `src/io/sim_config.cpp` | Parse `"mouth"` section from `sim_config.json` (`enabled`, `arcWidth` in degrees → radians, `requireApproach`) |
+| `data/sim_config.json` | Added `"mouth"` section: `enabled: false`, `arcWidth: 180`, `requireApproach: true` |
+| `tests/test_food.cpp` | 5 new tests: facing+moving eats, food behind not eaten, reversing doesn't eat, disabled reverts to omni, arc-only without approach check |
+| `tests/test_predation.cpp` | 4 new tests: facing+approaching catches, prey behind not caught, reversing doesn't catch, disabled reverts to omni |
+
+**Config format:**
+```json
+"mouth": {
+    "enabled": false,
+    "arcWidth": 180,
+    "requireApproach": true
+}
+```
+
+**Reused utilities:** `angle_in_arc()` from `sensor.h`, `Vec2::rotated()` for body-frame rotation, `Vec2::dot()` for velocity approach check, `toroidal_delta()` for directional delta.
+
+**210 tests, all passing** (201 previous + 5 food mouth + 4 predation mouth).

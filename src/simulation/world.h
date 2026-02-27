@@ -39,6 +39,11 @@ struct WorldConfig {
     // Predation
     float predator_catch_radius = 12.0f;  // how close predator must be to catch prey
     float predator_catch_energy = 50.0f;  // energy gained by predator per catch
+
+    // Directional mouth — requires boid to face and approach target to eat/catch
+    bool mouth_enabled = false;
+    float mouth_arc_width = 3.14159265f;  // radians (default π = 180°, front hemisphere)
+    bool mouth_require_approach = true;   // velocity dot-product check
 };
 
 class World {

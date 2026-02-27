@@ -2099,3 +2099,76 @@ Or, alternatively, fold batch functionality into the existing `wildboids_headles
 
 **Effort:** Low-medium. The core (steps 1–3) is simple infrastructure — subprocess management and CSV aggregation. The hard thinking is in *what to compare across runs*, which is really an Option H question. The shell-script version is essentially free and useful today; the structured version adds reproducibility and observation integration.
 
+---
+
+### Option K: Directional mouth — eating requires orientation and approach (low effort, interesting evolutionary pressure)
+
+**The problem it solves:** Currently, both food eating (`check_food_eating`) and predation (`check_predation`) are pure distance checks from the boid's center. A boid can eat food by drifting backwards over it, or a predator can "catch" prey that bumps into its tail. There's no selection pressure for boids to *aim* at food or prey — any contact works. This weakens the evolutionary signal for good sensor-thruster coordination, since random flailing that happens to pass over food is rewarded equally to precise oriented approach.
+
+**What it adds:** A directional "mouth" mechanic. To eat (food or prey), two conditions must hold beyond the existing distance check:
+
+1. **Arc check (food is in front).** The target must fall within a forward-facing arc (the "mouth"). Uses the same `angle_in_arc()` logic already used by the sensor system — compute the delta to the target in body frame, check it falls within a configurable arc centered on the boid's forward direction. This is the same math as sensor arc detection, just applied to eating.
+
+2. **Velocity dot check (boid is moving toward it).** `dot(boid.velocity, delta_to_target) > 0`. This prevents a boid that's reversing (velocity opposite to heading) from eating things that happen to be "in front" geometrically. The boid must actually be *approaching* the target, not backing over it.
+
+Both checks are cheap — one body-frame rotation + arc test (already have the utility function), one dot product. Two extra lines per eating check.
+
+**Implementation sketch:**
+
+In `check_food_eating()` and `check_predation()`, after the existing distance check passes:
+
+```cpp
+// Arc check: target must be in front of the boid's "mouth"
+Vec2 body_delta = delta.rotated(-boid.body.angle);
+float angle = std::atan2(body_delta.x, body_delta.y);  // +Y = forward
+if (!angle_in_arc(angle, 0.0f, config_.mouth_arc_width))
+    continue;  // not in front
+
+// Velocity check: boid must be moving toward the target
+if (delta.dot(boid.body.velocity) <= 0.0f)
+    continue;  // moving away or stationary
+```
+
+**Configuration (in `sim_config.json`):**
+
+```json
+{
+    "mouth": {
+        "enabled": true,
+        "arcWidth": 90,
+        "requireApproach": true
+    }
+}
+```
+
+- `enabled` — toggle the whole mechanic (off by default for backwards compatibility with existing champions).
+- `arcWidth` — mouth arc in degrees. 180° = front hemisphere (generous). 90° = must be roughly ahead (moderate). 45° = precision aiming required (hard mode). Start generous, tighten over evolutionary time if desired.
+- `requireApproach` — whether the velocity dot check is active. Could disable this independently to test arc-only vs arc+approach.
+
+Both prey eating food and predators catching prey would use the same mouth parameters (or could be split into per-type configs if predators and prey should have different mouth widths).
+
+**Evolutionary pressure this creates:**
+
+- **Stronger sensor-thruster correlation.** Boids must orient toward food/prey before eating, so evolution must discover "food detected in left arc → steer left" mappings. Random-weight brains that stumble over food backwards get nothing.
+- **Rewards precise steering.** A tighter mouth arc selects for boids that can aim accurately, not just move in the right general direction.
+- **Penalises reversal strategies.** The velocity check means boids can't evolve a "reverse into food" exploit. They must face and approach.
+- **Natural difficulty scaling.** Start with a wide mouth (180°) for early evolution when brains are random, tighten it as populations improve. Could even make mouth width a curriculum parameter that narrows over generations.
+
+**Risk: weaker early fitness gradient.** Random-weight boids already struggle to find food. Adding a mouth requirement means even accidental food contact often doesn't count (wrong orientation or backing over it). This could flatten the early fitness landscape, making it harder for evolution to get traction. Mitigations:
+- Start with a generous arc (180°) — most forward-moving food encounters still count.
+- The velocity check has a natural escape hatch: boids that move forward a lot (already selected for by the existing fitness gradient) will pass the velocity check for anything in their path.
+- Could phase in the mouth: first N generations use the current omni-directional eating, then switch on the mouth. Or start with 360° and narrow over time.
+
+**Testing:**
+
+- Boid moving forward over food within mouth arc → eats (existing behavior preserved for forward approach).
+- Boid moving forward over food outside mouth arc (food to the side/rear) → doesn't eat.
+- Boid reversing over food that's geometrically "in front" → doesn't eat (velocity check).
+- Stationary boid on top of food → doesn't eat (velocity check, unless we add a small threshold).
+- Predator catching prey: same arc + approach checks.
+- Mouth disabled → reverts to current omni-directional behavior.
+
+**Effort:** Low. The core is ~10 lines of new logic in two existing functions, plus config parsing. The `angle_in_arc()` utility and body-frame rotation pattern are already established. Main work is testing edge cases and tuning the arc width for good evolutionary dynamics.
+
+**Interactions with other options:** Composes well with Option H (observations) — mouth hit rate (successful eats / food within radius) would be a useful observation metric showing how well boids have learned to aim. Also interacts with Option E (food source experiments) — patchy food with a mouth requirement would strongly select for boids that can navigate *to* a patch and then methodically sweep through it with good orientation, rather than just blundering through.
+

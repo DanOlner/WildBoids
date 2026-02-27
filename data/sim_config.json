@@ -3,8 +3,8 @@
         "width": 1000,
         "height": 1000,
         "toroidal": true,
-        "linearDrag": 0.1,
-        "angularDrag": 1.75,
+        "linearDrag": 0.2,
+        "angularDrag": 2.25,
         "gridCellSize": 100
     },
     "food": {
@@ -18,6 +18,11 @@
     "predator": {
         "catchRadius": 5.0,
         "catchEnergy": 50.0
+    },
+    "mouth": {
+        "enabled": true,
+        "arcWidth": 170,
+        "requireApproach": true
     },
     "energy": {
         "metabolismRate": 0.1,

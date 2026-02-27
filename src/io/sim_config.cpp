@@ -59,6 +59,15 @@ SimConfig load_sim_config(const std::string& path) {
         cfg.world.predator_catch_energy = p.value("catchEnergy", cfg.world.predator_catch_energy);
     }
 
+    // Directional mouth
+    if (j.contains("mouth")) {
+        const auto& m = j["mouth"];
+        cfg.world.mouth_enabled = m.value("enabled", cfg.world.mouth_enabled);
+        if (m.contains("arcWidth"))
+            cfg.world.mouth_arc_width = m["arcWidth"].get<float>() * (3.14159265f / 180.0f);
+        cfg.world.mouth_require_approach = m.value("requireApproach", cfg.world.mouth_require_approach);
+    }
+
     // Energy
     if (j.contains("energy")) {
         const auto& e = j["energy"];

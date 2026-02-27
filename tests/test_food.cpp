@@ -219,6 +219,128 @@ TEST_CASE("Fitness: total_energy_gained tracks cumulative food eaten", "[food][f
     CHECK_THAT(world.get_boids()[0].total_energy_gained, WithinAbs(10.0f, 0.01f));
 }
 
+// --- Directional mouth tests ---
+
+TEST_CASE("Mouth: boid facing food and moving toward it eats", "[food][mouth]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 0.0f;
+    config.thrust_cost = 0.0f;
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 3.14159265f;  // 180° front hemisphere
+    config.mouth_require_approach = true;
+    World world(config);
+
+    // Boid at (100,100) facing +Y (angle=0), moving +Y
+    Boid b = make_boid_at({100, 100});
+    b.body.angle = 0.0f;
+    b.body.velocity = {0, 5.0f};
+    world.add_boid(std::move(b));
+
+    // Food ahead in +Y direction
+    world.add_food(Food{{100, 105}, 10.0f});
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_food().empty());
+    CHECK_THAT(world.get_boids()[0].total_energy_gained, WithinAbs(10.0f, 0.01f));
+}
+
+TEST_CASE("Mouth: food behind boid is not eaten", "[food][mouth]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 0.0f;
+    config.thrust_cost = 0.0f;
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 1.5708f;  // 90° narrow mouth
+    config.mouth_require_approach = false;  // arc-only check
+    World world(config);
+
+    // Boid facing +Y (angle=0)
+    Boid b = make_boid_at({100, 100});
+    b.body.angle = 0.0f;
+    world.add_boid(std::move(b));
+
+    // Food behind (in -Y direction)
+    world.add_food(Food{{100, 95}, 10.0f});
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_food().size() == 1);  // not eaten
+}
+
+TEST_CASE("Mouth: boid reversing over food does not eat", "[food][mouth]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 0.0f;
+    config.thrust_cost = 0.0f;
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 3.14159265f;  // 180°
+    config.mouth_require_approach = true;
+    World world(config);
+
+    // Boid facing +Y but moving -Y (reversing)
+    Boid b = make_boid_at({100, 100});
+    b.body.angle = 0.0f;
+    b.body.velocity = {0, -5.0f};  // moving backwards
+    world.add_boid(std::move(b));
+
+    // Food ahead (in front geometrically, but boid is moving away)
+    world.add_food(Food{{100, 105}, 10.0f});
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_food().size() == 1);  // not eaten — moving away
+}
+
+TEST_CASE("Mouth: disabled reverts to omnidirectional eating", "[food][mouth]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 0.0f;
+    config.thrust_cost = 0.0f;
+    config.mouth_enabled = false;  // disabled
+    World world(config);
+
+    // Boid facing +Y, food behind — should still eat with mouth disabled
+    Boid b = make_boid_at({100, 100});
+    b.body.angle = 0.0f;
+    world.add_boid(std::move(b));
+
+    world.add_food(Food{{100, 95}, 10.0f});
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_food().empty());
+}
+
+TEST_CASE("Mouth: arc-only mode without approach check", "[food][mouth]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 0.0f;
+    config.thrust_cost = 0.0f;
+    config.mouth_enabled = true;
+    config.mouth_arc_width = 3.14159265f;  // 180°
+    config.mouth_require_approach = false;  // no velocity check
+    World world(config);
+
+    // Boid facing +Y, stationary, food ahead
+    Boid b = make_boid_at({100, 100});
+    b.body.angle = 0.0f;
+    b.body.velocity = {0, 0};  // not moving
+    world.add_boid(std::move(b));
+
+    world.add_food(Food{{100, 105}, 10.0f});
+
+    world.step(1.0f / 120.0f);
+
+    CHECK(world.get_food().empty());  // eats — no approach required
+}
+
 TEST_CASE("Food: boid with high thrust runs out faster", "[food][energy]") {
     WorldConfig config;
     config.width = 800; config.height = 800;
