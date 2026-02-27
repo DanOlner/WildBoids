@@ -2172,3 +2172,121 @@ Both prey eating food and predators catching prey would use the same mouth param
 
 **Interactions with other options:** Composes well with Option H (observations) — mouth hit rate (successful eats / food within radius) would be a useful observation metric showing how well boids have learned to aim. Also interacts with Option E (food source experiments) — patchy food with a mouth requirement would strongly select for boids that can navigate *to* a patch and then methodically sweep through it with good orientation, rather than just blundering through.
 
+---
+
+## Option L — Compound-Eye Sensors with Evolvable Morphology
+
+**Goal:** Replace the current separate sensor arrays (7 boid-detecting + 3 food-detecting) with unified "compound eyes" — N physical eyes evenly or evolutionarily distributed around the boid, each reporting multiple detection channels. This unifies the sensor layout into a single evolvable structure and provides richer, spatially-correlated information to NEAT.
+
+**Current problem with separate sensor arrays:**
+
+The current design has boid-detecting sensors at one set of angles (5 narrow at ±72° forward, 2 wide at ±135° rear) and food-detecting sensors at completely different angles (3 wide at 120° spacing). This means:
+- The boid literally "sees" food and other boids through different eye arrangements
+- Evolving sensor directions (Option K follow-on) would require evolving two separate layouts
+- NEAT can't easily learn "there's food AND a predator at my 2 o'clock" because those signals come from sensors with different spatial coverage
+- Crossover between morphologies is messy — swapping a food sensor angle into a boid sensor slot changes what the NEAT wiring means
+
+**Proposed design — unified multi-channel eyes:**
+
+Each physical eye position produces up to 3 detection channels:
+1. **Food channel** — nearest food distance (0–1, as current NearestDistance)
+2. **Same-type channel** — nearest same-species boid distance (prey sees prey, predator sees predator)
+3. **Opposite-type channel** — nearest opposite-species boid distance (prey sees predators, predator sees prey)
+
+Plus 1 speed proprioceptive sensor (unchanged).
+
+So with N eyes: `N × 3 + 1` total NEAT inputs.
+
+**Key design choices:**
+
+| Eyes | Channels | Total inputs | Initial NEAT connections (× 6 thrusters) |
+|------|----------|-------------|------------------------------------------|
+| 8    | 3        | 25          | 150                                       |
+| 10   | 3        | 31          | 186                                       |
+| 12   | 3        | 37          | 222                                       |
+
+8 eyes × 3 channels is a reasonable starting point — comparable information density to the current 10 detection sensors but spatially unified.
+
+**"Same-type" and "opposite-type" rather than "prey" and "predator":** The spec file doesn't need to know what species it belongs to. A prey boid's opposite channel detects predators; a predator's opposite channel detects prey. Same code, same spec, species-agnostic.
+
+**Global channel toggles:** A sim_config setting controls which channels are active:
+
+```json
+"sensors": {
+    "eyes": 8,
+    "arcWidthDeg": 45,
+    "maxRange": 100,
+    "channels": ["food", "same", "opposite"]
+}
+```
+
+Disabled channels output constant 0.0 to NEAT — the input nodes still exist (preserving genome compatibility) but carry no information. This means:
+- Food-only evolution: `"channels": ["food"]` — same-type and opposite-type inputs are zeroed
+- Add predators later: switch to `"channels": ["food", "opposite"]` — the dormant opposite-type wiring in evolved champions might even partially activate, giving a head start on predator avoidance
+- Full co-evolution: `"channels": ["food", "same", "opposite"]`
+
+**Phase 1 — fixed layout, multi-channel eyes (no morphology evolution):**
+
+Replace the current separate sensor arrays with N evenly-spaced eyes, each producing 3 channels. This is a pure refactor of the sensor system with no evolutionary machinery changes:
+- New `CompoundEyeSpec` replaces the per-sensor `SensorSpec` list
+- `SensorySystem::perceive()` iterates eyes × channels instead of individual sensors
+- Boid spec JSON changes from a list of individual sensors to eye count + arc + range
+- NEAT input count derived from `eyes × active_channels + 1`
+- Existing tests updated, new tests for multi-channel perception
+
+**Phase 2 — evolvable eye directions (morphology genome):**
+
+Add a "morphology genome" alongside the NEAT genome — a float array of `center_angle` per eye:
+- **Mutation:** Gaussian perturbation of angles (sigma ~5–10°)
+- **Crossover:** Per-eye blend or random parent selection, aligned by eye index
+- **Speciation:** Could incorporate morphology distance into the NEAT compatibility metric, or keep separate
+- **Fixed eye count:** NEAT input count stays constant within a run, so genome compatibility is preserved
+- Arc width could also be evolvable (narrow vs wide per eye) but start with fixed uniform arcs
+
+**Evolutionary dynamics this creates:**
+
+- **Emergent specialisation:** Prey might pack eyes forward for precise food-mouth alignment (especially with the Option K mouth mechanic). Predators might spread eyes wider for prey scanning.
+- **Co-evolutionary pressure on layout:** Predators approaching from blind spots select for rear coverage in prey. Prey clustering in predator blind spots select for wider predator vision.
+- **Single layout to optimise:** Evolution discovers one arrangement that serves all detection needs simultaneously, creating genuine trade-offs (frontal food precision vs rear predator awareness).
+- **Correlated spatial info for NEAT:** "Food at 2 o'clock AND predator at 2 o'clock" arrives on adjacent input nodes, enabling richer learned responses than separate sensor systems could provide.
+
+**Interactions with other options:**
+- **Option K (mouth):** Compound eyes with dense forward coverage + directional mouth = strong selection for precise oriented approach to food.
+- **Option C (sensor experiments):** The multi-channel design subsumes most of what Option C proposed — instead of separate experiments with different sensor types, channels are built-in and togglable.
+- **Options A/B (co-evolution):** Same-type and opposite-type channels are designed for co-evolutionary scenarios from the start.
+
+**Effort:** Phase 1 (fixed layout, multi-channel) is moderate — mainly refactoring the sensor system and updating spec files. Phase 2 (evolvable morphology) is a larger addition requiring a new genome type, mutation/crossover operators, and integration with the population manager. Recommend implementing Phase 1 first and running evolution experiments before adding Phase 2.
+
+**Sensor-actuator balance — how many eyes do we need?**
+
+There's a theoretical and practical question about the relationship between sensor count (NEAT inputs) and thruster count (NEAT outputs). With 6 thrusters, do we need a minimum number of sensor inputs for evolution to discover complex coordinated movement?
+
+[Ashby's Law of Requisite Variety](https://en.wikipedia.org/wiki/Variety_(cybernetics)) from cybernetics provides the theoretical framing: a controller must have at least as much variety (complexity) as the system it regulates. In our case, 6 independent thrusters can produce a rich space of forces and torques. If sensory input is too impoverished — say 3 food-only sensors feeding 6 thrusters — the network can't distinguish enough environmental states to learn differentiated thruster responses. The controller variety is bottlenecked by the sensor variety, not the network capacity.
+
+Research in evolutionary robotics supports this in practice:
+
+- [Nolfi & Floreano's foundational work](https://www.sciencedirect.com/science/article/abs/pii/S002002559900078X) showed that evolution tends to discover surprisingly simple solutions even with many sensors available — robots solving discrimination tasks with just two photoreceptors. Evolution naturally economises on sensors, **but only to the extent that the task allows**. Complex multi-actuator coordination requires richer sensory differentiation.
+
+- [Miras et al. (2022)](https://pmc.ncbi.nlm.nih.gov/articles/PMC9577008/) found a correlation between phenotypic complexity and evolvability, noting that evolution often settles on compact phenotypes — but these compact solutions lack evolvability for more complex tasks. The implication: if sensors are too few, evolution finds a local optimum (e.g. "always thrust forward") but can't escape it toward richer behaviors.
+
+- NEAT's [minimal-complexity growth strategy](https://nn.cs.utexas.edu/?neat=) means it starts with direct input→output connections and only adds hidden nodes when needed. With few inputs and many outputs, the initial fully-connected network has sparse information per output. With 3 inputs × 6 outputs = 18 initial connections, each thruster gets only 3 signals to work with. With 25 inputs × 6 outputs = 150 initial connections, each thruster sees a rich sensory panorama from the start, giving NEAT much more raw material for selection to act on before hidden nodes are even needed.
+
+- [Co-evolution of sensors and controllers](https://www.researchgate.net/publication/228707125_Co-evolution_of_Sensors_and_Controllers) research showed that when morphology and control co-evolve, evolution discovers the appropriate balance between sensory and motor complexity for the task. Notably, even without penalty on sensor count, evolved robots often used fewer sensors than available — suggesting evolution finds the minimum sufficient sensory resolution for the actuator complexity at hand.
+
+- [Neuroevolution produces more focused information transfer](https://pmc.ncbi.nlm.nih.gov/articles/PMC11757640/) than backpropagation-trained networks, with information compressed into smaller sets of relevant signals. This suggests evolved networks naturally create internal bottlenecks — but they need enough raw sensory variety to have something worth compressing.
+
+**Practical implications for wildboids:**
+
+| Config | Inputs | Outputs | Initial connections | Sensory richness per thruster |
+|--------|--------|---------|--------------------|-----------------------------|
+| Current (7 boid + 3 food + speed) | 11 | 6 | 66 | ~2 relevant signals each |
+| 8 eyes × 1 channel (food only) | 9 | 6 | 54 | sparse |
+| 8 eyes × 3 channels + speed | 25 | 6 | 150 | rich |
+| 12 eyes × 3 channels + speed | 37 | 6 | 222 | very rich, slower early evolution |
+
+The current 11-input / 6-output setup is probably near the lower bound for useful complexity with 6 thrusters. Moving to 8 eyes × 3 channels (25 inputs) roughly triples the initial connection count, which should give NEAT substantially more raw material for evolving differentiated thruster control — particularly for the strafe thrusters, which need lateral sensory information that the current sensor layout provides poorly.
+
+The risk of too many inputs is slower early evolution (more connections to search over, more initial genome complexity). But NEAT's complexification-from-minimal approach mitigates this: it starts by finding useful direct sensor→thruster mappings and only adds hidden-node complexity later. The key insight is that **more inputs don't add hidden-node complexity — they add connection variety**, which is exactly what NEAT's initial search phase needs.
+
+A reasonable heuristic: aim for at least 3–5× as many inputs as outputs. This gives each output node enough distinct sensory signals to learn differentiated responses, while keeping the initial genome manageable. For 6 thrusters, that suggests 18–30 inputs — right in the 8-eye × 3-channel range.
+
