@@ -143,6 +143,17 @@ BoidSpec load_boid_spec(const std::string& path) {
             cfg.channels.push_back(parse_sensor_channel(jch.get<std::string>()));
         }
 
+        if (jce.contains("longRangeEyes")) {
+            for (const auto& je : jce.at("longRangeEyes")) {
+                EyeSpec eye;
+                eye.id = je.at("id").get<int>();
+                eye.center_angle = je.at("centerAngleDeg").get<float>() * DEG_TO_RAD;
+                eye.arc_width = je.at("arcWidthDeg").get<float>() * DEG_TO_RAD;
+                eye.max_range = je.at("maxRange").get<float>();
+                cfg.long_range_eyes.push_back(eye);
+            }
+        }
+
         cfg.has_speed_sensor = jce.value("speedSensor", true);
         cfg.has_angular_velocity_sensor = jce.value("angularVelocitySensor", false);
         cfg.has_noise_sensor = jce.value("noiseSensor", false);
@@ -256,6 +267,18 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
             je["arcWidthDeg"] = eye.arc_width * RAD_TO_DEG;
             je["maxRange"] = eye.max_range;
             jce["eyes"].push_back(je);
+        }
+
+        if (!spec.compound_eyes->long_range_eyes.empty()) {
+            jce["longRangeEyes"] = json::array();
+            for (const auto& eye : spec.compound_eyes->long_range_eyes) {
+                json je;
+                je["id"] = eye.id;
+                je["centerAngleDeg"] = eye.center_angle * RAD_TO_DEG;
+                je["arcWidthDeg"] = eye.arc_width * RAD_TO_DEG;
+                je["maxRange"] = eye.max_range;
+                jce["longRangeEyes"].push_back(je);
+            }
         }
 
         jce["channels"] = json::array();

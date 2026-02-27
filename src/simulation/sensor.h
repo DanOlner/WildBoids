@@ -28,15 +28,19 @@ struct EyeSpec {
 
 // Full compound-eye sensor configuration
 struct CompoundEyeConfig {
-    std::vector<EyeSpec> eyes;
-    std::vector<SensorChannel> channels;  // which channels are active
+    std::vector<EyeSpec> eyes;              // short-range compound eyes
+    std::vector<EyeSpec> long_range_eyes;   // long-range narrow eyes (second tier)
+    std::vector<SensorChannel> channels;    // which channels are active (shared by both tiers)
     bool has_speed_sensor = true;
     bool has_angular_velocity_sensor = false;
     bool has_noise_sensor = false;
     bool has_shoaling_sensor = false;
 
+    int short_range_eye_count() const { return static_cast<int>(eyes.size()); }
+    int long_range_eye_count() const { return static_cast<int>(long_range_eyes.size()); }
+
     int total_inputs() const {
-        return static_cast<int>(eyes.size()) * static_cast<int>(channels.size())
+        return static_cast<int>((eyes.size() + long_range_eyes.size()) * channels.size())
                + (has_speed_sensor ? 1 : 0)
                + (has_angular_velocity_sensor ? 1 : 0)
                + (has_noise_sensor ? 1 : 0)

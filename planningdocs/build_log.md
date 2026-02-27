@@ -722,3 +722,45 @@ Outputs `uniform_random(-1, 1)` each tick, giving the NEAT network a source of s
 **NEAT input count:** 49 → 51. No brain code changes — flows automatically from `CompoundEyeConfig::total_inputs()`.
 
 **241 tests, all passing** (221 previous + 6 angular velocity + 5 noise + 9 existing test count updates).
+
+---
+
+### Option M (Steps M.1–M.2): Long-range narrow eyes — two-tier vision (241 → 261 tests) [27.2.26]
+
+Added a second tier of long-range narrow eyes alongside the existing short-range compound eyes. Both tiers share the same perception code path and channel system. The long-range eyes use narrower arcs (25°) at 3× the range (300 units vs 100), giving sparse but directionally informative distant detection — designed for future morphology evolution where the two tiers evolve differently (arc width for short-range, angular position for long-range).
+
+**Design:**
+
+- **Output layout:** `[short eyes × channels, long eyes × channels, proprioceptive]`
+- **Single grid query:** Max range computed across both tiers; per-eye range/arc filtering handles the rest
+- **Refactored inner loop:** `process_eyes` lambda accepts any eye list + output offset, called twice per candidate (short-range at offset 0, long-range at `n_short * n_channels`)
+- **Backward compatible:** Specs without `"longRangeEyes"` load with empty vector — zero additional inputs, identical behavior to before
+
+**Default long-range eye layout (both prey and predator):**
+
+| Eye | Center angle | Arc width | Range |
+|-----|-------------|-----------|-------|
+| 0   | 0° (forward) | 25° | 300 |
+| 1   | 90° (right) | 25° | 300 |
+| 2   | 180° (rear) | 25° | 300 |
+| 3   | -90° (left) | 25° | 300 |
+
+**NEAT input count:** 51 → 63 (16 short eyes × 3 channels + 4 long eyes × 3 channels + speed + angular_vel + noise = 48 + 12 + 3).
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/simulation/sensor.h` | Added `long_range_eyes` vector to `CompoundEyeConfig`, `short_range_eye_count()` / `long_range_eye_count()` helpers, updated `total_inputs()` |
+| `src/simulation/sensory_system.cpp` | Refactored `perceive_compound()`: `process_eyes` lambda for shared eye iteration, both tiers processed per candidate, max range includes long-range eyes, proprioceptive offset accounts for both tiers |
+| `src/io/boid_spec.cpp` | Load/save optional `"longRangeEyes"` JSON array in compound-eye section |
+| `data/simple_boid.json` | Added 4 long-range narrow eyes (25° arc, 300 range, cardinal directions) |
+| `data/simple_predator.json` | Same long-range eyes as prey |
+| `src/display/renderer.h` | Added `tint` parameter to `draw_one_arc()` (0 = green, 1 = blue/cyan) |
+| `src/display/renderer.cpp` | `draw_sensor_arcs()` draws long-range eyes in blue/cyan tint with correct output offset for signal lookup |
+| `tests/test_sensor.cpp` | 7 new tests: total_inputs with both tiers, backward compat with empty long-range, detection beyond short range, both tiers detect close target, narrow arc rejection, multi-channel output layout, food detection at long range |
+| `tests/test_boid_spec.cpp` | 2 new tests: long-range round-trip save/reload, loading spec without longRangeEyes gives empty vector. Updated existing load test to verify long-range eye count and parameters |
+
+**Renderer:** Long-range eye arcs display in blue/cyan (vs green for short-range) in the sensor overlay (S key), making the two tiers visually distinct.
+
+**261 tests, all passing** (241 previous + 7 sensor + 2 boid_spec + 1 existing test update).

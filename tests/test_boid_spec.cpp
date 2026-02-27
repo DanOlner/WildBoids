@@ -46,6 +46,13 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.compound_eyes->has_speed_sensor == true);
     CHECK(spec.compound_eyes->eyes[0].id == 0);
     CHECK_THAT(spec.compound_eyes->eyes[0].center_angle, WithinAbs(0.0f, 1e-4f));
+
+    // Long-range eyes
+    CHECK(spec.compound_eyes->long_range_eyes.size() == 4);
+    CHECK(spec.compound_eyes->long_range_eyes[0].id == 0);
+    CHECK_THAT(spec.compound_eyes->long_range_eyes[0].max_range, WithinAbs(300.0f, 1e-4f));
+    CHECK_THAT(spec.compound_eyes->long_range_eyes[0].center_angle, WithinAbs(0.0f, 1e-4f));
+
     // Input count derived from spec — resilient to toggling proprioceptive sensors
     CHECK(sensor_input_count(spec) == spec.compound_eyes->total_inputs());
 }
@@ -286,4 +293,62 @@ TEST_CASE("Spec to boid integration: fire rear thruster and move", "[boid_spec]"
     CHECK(boid.body.position.y > 0);
     CHECK(boid.body.velocity.y > 0);
     CHECK_THAT(boid.body.position.x, WithinAbs(0.0f, 1e-3f));
+}
+
+TEST_CASE("Long-range eyes round-trip: save and reload", "[boid_spec][longrange]") {
+    BoidSpec spec;
+    spec.version = "0.2";
+    spec.type = "prey";
+    spec.mass = 1.0f;
+    spec.moment_of_inertia = 0.5f;
+    spec.initial_energy = 100.0f;
+    spec.thrusters.push_back(ThrusterSpec{0, "rear", {0, -0.5f}, {0, 1}, 5.0f});
+
+    CompoundEyeConfig cfg;
+    cfg.eyes.push_back(EyeSpec{0, 0, 0.785f, 100});
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 0.436f, 300});
+    cfg.long_range_eyes.push_back(EyeSpec{1, 1.571f, 0.436f, 300});
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same};
+    cfg.has_speed_sensor = true;
+    spec.compound_eyes = cfg;
+
+    std::string tmp_path = "test_longrange_roundtrip.json";
+    save_boid_spec(spec, tmp_path);
+    BoidSpec reloaded = load_boid_spec(tmp_path);
+
+    REQUIRE(reloaded.compound_eyes.has_value());
+    CHECK(reloaded.compound_eyes->eyes.size() == 1);
+    CHECK(reloaded.compound_eyes->long_range_eyes.size() == 2);
+    CHECK_THAT(reloaded.compound_eyes->long_range_eyes[0].max_range, WithinAbs(300.0f, 0.1f));
+    CHECK_THAT(reloaded.compound_eyes->long_range_eyes[1].center_angle, WithinAbs(1.571f, 0.01f));
+    CHECK(sensor_input_count(reloaded) == (1 + 2) * 2 + 1); // 3 eyes × 2 channels + speed = 7
+
+    std::filesystem::remove(tmp_path);
+}
+
+TEST_CASE("Loading spec without longRangeEyes gives empty vector", "[boid_spec][longrange]") {
+    // Build a minimal spec without long-range eyes, save, reload
+    BoidSpec spec;
+    spec.version = "0.2";
+    spec.type = "prey";
+    spec.mass = 1.0f;
+    spec.moment_of_inertia = 0.5f;
+    spec.initial_energy = 100.0f;
+    spec.thrusters.push_back(ThrusterSpec{0, "rear", {0, -0.5f}, {0, 1}, 5.0f});
+
+    CompoundEyeConfig cfg;
+    cfg.eyes.push_back(EyeSpec{0, 0, 0.785f, 100});
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    spec.compound_eyes = cfg;
+
+    std::string tmp_path = "test_no_longrange.json";
+    save_boid_spec(spec, tmp_path);
+    BoidSpec reloaded = load_boid_spec(tmp_path);
+
+    REQUIRE(reloaded.compound_eyes.has_value());
+    CHECK(reloaded.compound_eyes->long_range_eyes.empty());
+    CHECK(sensor_input_count(reloaded) == 1); // 1 eye × 1 channel, no speed
+
+    std::filesystem::remove(tmp_path);
 }

@@ -1033,3 +1033,190 @@ TEST_CASE("Compound eye: toroidal detection across world edge", "[sensor][compou
     // Distance: 800 - 790 + 10 = 20, signal: 1 - 20/100 = 0.8
     CHECK_THAT(outputs[0], WithinAbs(0.8f, 0.02f));
 }
+
+// ---- Long-range eye tests ----
+
+TEST_CASE("Two-tier: total_inputs includes both tiers", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    // 2 short-range eyes
+    cfg.eyes.push_back(EyeSpec{0, 0, 45 * DEG, 100});
+    cfg.eyes.push_back(EyeSpec{1, PI, 45 * DEG, 100});
+    // 1 long-range eye
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300});
+
+    // (2 + 1) × 3 + 1 speed = 10
+    CHECK(cfg.total_inputs() == 10);
+    CHECK(cfg.short_range_eye_count() == 2);
+    CHECK(cfg.long_range_eye_count() == 1);
+}
+
+TEST_CASE("Two-tier: empty long-range preserves original behavior", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Same};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    // No long_range_eyes
+
+    CHECK(cfg.total_inputs() == 1);
+    CHECK(cfg.long_range_eye_count() == 0);
+
+    SensorySystem sys(cfg);
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 450}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[1] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+    // 50 units ahead, signal = 1 - 50/100 = 0.5
+    CHECK_THAT(outputs[0], WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Two-tier: long-range eye detects boid beyond short-range", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Same};
+    cfg.has_speed_sensor = false;
+    // Short-range: forward eye, 100 unit range
+    cfg.eyes.push_back(EyeSpec{0, 0, 45 * DEG, 100});
+    // Long-range: forward eye, 300 unit range, narrow 25° arc
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300});
+    SensorySystem sys(cfg);
+
+    // Target 200 units ahead — beyond short range, within long range
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 600}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    // Output layout: [short_eye0:same, long_eye0:same]
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Short-range eye: 200 > 100 → no detection
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Long-range eye: 200/300 → signal = 1 - 200/300 ≈ 0.333
+    CHECK_THAT(outputs[1], WithinAbs(1.0f - 200.0f / 300.0f, 0.02f));
+}
+
+TEST_CASE("Two-tier: both tiers detect boid within both ranges", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Same};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 45 * DEG, 100});
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300});
+    SensorySystem sys(cfg);
+
+    // Target 80 units ahead — within both ranges
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 480}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Short-range: 1 - 80/100 = 0.2
+    CHECK_THAT(outputs[0], WithinAbs(0.2f, 0.02f));
+    // Long-range: 1 - 80/300 ≈ 0.733
+    CHECK_THAT(outputs[1], WithinAbs(1.0f - 80.0f / 300.0f, 0.02f));
+}
+
+TEST_CASE("Two-tier: narrow long-range arc rejects off-axis targets", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Same};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});       // wide short-range
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300}); // narrow long-range forward
+    SensorySystem sys(cfg);
+
+    // Target 80 units to the right (90°) — within short-range wide arc but outside narrow long-range
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({480, 400}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Short-range: 80 units at ~90° from forward — within 90° arc (±45°)? No — 90° offset > 45° half-arc
+    // Actually +X direction = angle atan2(80, 0) = π/2 ≈ 90°. Arc center 0, half-width 45°. 90° > 45° → miss
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Long-range: same angle, also outside 12.5° half-arc → miss
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Two-tier: output layout with multiple channels", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same};
+    cfg.has_speed_sensor = true;
+    // 2 short-range eyes
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});       // forward
+    cfg.eyes.push_back(EyeSpec{1, PI, 90 * DEG, 100});       // rear
+    // 1 long-range eye
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300}); // forward
+    SensorySystem sys(cfg);
+
+    // Expected layout:
+    // [0] short_eye0:food, [1] short_eye0:same
+    // [2] short_eye1:food, [3] short_eye1:same
+    // [4] long_eye0:food,  [5] long_eye0:same
+    // [6] speed
+    CHECK(cfg.total_inputs() == 7);
+
+    // Place a same-type boid 200 units ahead — only long-range forward eye should see it
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"),
+                              make_boid({400, 600}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    world.step(0);
+
+    float outputs[7] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Short eyes: 200 > 100 → all zero
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f)); // short_eye0:food
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f)); // short_eye0:same
+    CHECK_THAT(outputs[2], WithinAbs(0.0f, 1e-6f)); // short_eye1:food
+    CHECK_THAT(outputs[3], WithinAbs(0.0f, 1e-6f)); // short_eye1:same
+    // Long-range eye: food channel = 0 (no food), same channel detects at 200/300
+    CHECK_THAT(outputs[4], WithinAbs(0.0f, 1e-6f)); // long_eye0:food
+    CHECK_THAT(outputs[5], WithinAbs(1.0f - 200.0f / 300.0f, 0.02f)); // long_eye0:same
+    // Speed: stationary = 0
+    CHECK_THAT(outputs[6], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Two-tier: long-range eye detects food", "[sensor][longrange]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.eyes.push_back(EyeSpec{0, 0, 45 * DEG, 100});
+    cfg.long_range_eyes.push_back(EyeSpec{0, 0, 25 * DEG, 300});
+    SensorySystem sys(cfg);
+
+    auto boids = make_boids(make_boid({400, 400}, 0, "prey"));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& b : boids) world.add_boid(std::move(b));
+    // Add food 200 units ahead
+    world.add_food({400, 600});
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Short-range: 200 > 100 → no detection
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Long-range: 1 - 200/300 ≈ 0.333
+    CHECK_THAT(outputs[1], WithinAbs(1.0f - 200.0f / 300.0f, 0.02f));
+}

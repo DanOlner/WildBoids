@@ -182,11 +182,22 @@ void Renderer::draw_food(const std::vector<Food>& food, const WorldConfig& confi
 }
 
 // Draw a single sensor arc with given geometry and signal strength
+// tint: 0 = green (short-range default), 1 = blue/cyan (long-range)
 void Renderer::draw_one_arc(const Boid& boid, const WorldConfig& config,
-                             float center_angle, float arc_width, float max_range, float signal) {
-    Uint8 r = static_cast<Uint8>(signal * 200);
-    Uint8 g = static_cast<Uint8>(80 + signal * 175);
-    Uint8 b = static_cast<Uint8>(120 * (1.0f - signal));
+                             float center_angle, float arc_width, float max_range, float signal,
+                             int tint) {
+    Uint8 r, g, b;
+    if (tint == 1) {
+        // Blue/cyan for long-range eyes
+        r = static_cast<Uint8>(60 * (1.0f - signal));
+        g = static_cast<Uint8>(80 + signal * 175);
+        b = static_cast<Uint8>(120 + signal * 135);
+    } else {
+        // Green for short-range eyes (original)
+        r = static_cast<Uint8>(signal * 200);
+        g = static_cast<Uint8>(80 + signal * 175);
+        b = static_cast<Uint8>(120 * (1.0f - signal));
+    }
     SDL_SetRenderDrawColor(renderer_, r, g, b, 180);
 
     float world_angle = boid.body.angle;
@@ -227,8 +238,10 @@ void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
         // Compound eyes: one arc per eye, colour by max signal across channels
         const auto& cfg = boid.sensors->compound_config();
         int n_channels = static_cast<int>(cfg.channels.size());
+        int n_short = cfg.short_range_eye_count();
 
-        for (int e = 0; e < static_cast<int>(cfg.eyes.size()); ++e) {
+        // Short-range eyes (green tint)
+        for (int e = 0; e < n_short; ++e) {
             const auto& eye = cfg.eyes[e];
             float max_signal = 0.0f;
             for (int c = 0; c < n_channels; ++c) {
@@ -238,6 +251,20 @@ void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
                 }
             }
             draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, max_signal);
+        }
+
+        // Long-range eyes (blue/cyan tint)
+        int long_offset = n_short * n_channels;
+        for (int e = 0; e < cfg.long_range_eye_count(); ++e) {
+            const auto& eye = cfg.long_range_eyes[e];
+            float max_signal = 0.0f;
+            for (int c = 0; c < n_channels; ++c) {
+                int idx = long_offset + e * n_channels + c;
+                if (idx < static_cast<int>(boid.sensor_outputs.size())) {
+                    max_signal = std::max(max_signal, boid.sensor_outputs[idx]);
+                }
+            }
+            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, max_signal, 1);
         }
     } else {
         // Legacy sensor arcs

@@ -152,8 +152,12 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
     const Boid& self = boids[self_index];
     const auto& cfg = *eye_config_;
     int n_channels = static_cast<int>(cfg.channels.size());
-    int n_eyes = static_cast<int>(cfg.eyes.size());
+    int n_short_eyes = cfg.short_range_eye_count();
+    int n_long_eyes = cfg.long_range_eye_count();
     int total = cfg.total_inputs();
+
+    // Output layout: [short eyes × channels, long eyes × channels, proprioceptive]
+    int long_range_offset = n_short_eyes * n_channels;
 
     // Zero all outputs
     for (int i = 0; i < total; ++i) outputs[i] = 0.0f;
@@ -171,13 +175,32 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
     bool same_enabled = same_ch >= 0 && channel_enabled(SensorChannel::Same, config.enabled_channels);
     bool opposite_enabled = opposite_ch >= 0 && channel_enabled(SensorChannel::Opposite, config.enabled_channels);
 
+    // Helper: check a target against all eyes in a list, updating outputs
+    auto process_eyes = [&](const std::vector<EyeSpec>& eye_list, int out_offset,
+                            float angle, float dist_sq, int ch_idx) {
+        for (int e = 0; e < static_cast<int>(eye_list.size()); ++e) {
+            const auto& eye = eye_list[e];
+            float range_sq = eye.max_range * eye.max_range;
+            if (dist_sq > range_sq) continue;
+            if (!angle_in_arc(angle, eye.center_angle, eye.arc_width)) continue;
+
+            int out_idx = out_offset + e * n_channels + ch_idx;
+            float dist = std::sqrt(dist_sq);
+            float signal = 1.0f - (dist / eye.max_range);
+            if (signal > outputs[out_idx]) {
+                outputs[out_idx] = signal;
+            }
+        }
+    };
+
     // --- Boid channels (Same, Opposite) ---
     if (same_enabled || opposite_enabled) {
-        // Find max range across all eyes for a single grid query
+        // Find max range across all eyes (both tiers) for a single grid query
         float max_range = 0;
-        for (const auto& eye : cfg.eyes) {
-            if (eye.max_range > max_range) max_range = eye.max_range;
-        }
+        for (const auto& eye : cfg.eyes)
+            max_range = std::max(max_range, eye.max_range);
+        for (const auto& eye : cfg.long_range_eyes)
+            max_range = std::max(max_range, eye.max_range);
 
         std::vector<int> candidates;
         grid.query(self.body.position, max_range, candidates);
@@ -204,19 +227,8 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
             float angle = std::atan2(body_delta.x, body_delta.y);
             float dist_sq = delta.length_squared();
 
-            for (int e = 0; e < n_eyes; ++e) {
-                const auto& eye = cfg.eyes[e];
-                float range_sq = eye.max_range * eye.max_range;
-                if (dist_sq > range_sq) continue;
-                if (!angle_in_arc(angle, eye.center_angle, eye.arc_width)) continue;
-
-                int out_idx = e * n_channels + ch_idx;
-                float dist = std::sqrt(dist_sq);
-                float signal = 1.0f - (dist / eye.max_range);
-                if (signal > outputs[out_idx]) {
-                    outputs[out_idx] = signal;
-                }
-            }
+            process_eyes(cfg.eyes, 0, angle, dist_sq, ch_idx);
+            process_eyes(cfg.long_range_eyes, long_range_offset, angle, dist_sq, ch_idx);
         }
     }
 
@@ -230,24 +242,13 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
             float angle = std::atan2(body_delta.x, body_delta.y);
             float dist_sq = delta.length_squared();
 
-            for (int e = 0; e < n_eyes; ++e) {
-                const auto& eye = cfg.eyes[e];
-                float range_sq = eye.max_range * eye.max_range;
-                if (dist_sq > range_sq) continue;
-                if (!angle_in_arc(angle, eye.center_angle, eye.arc_width)) continue;
-
-                int out_idx = e * n_channels + food_ch;
-                float dist = std::sqrt(dist_sq);
-                float signal = 1.0f - (dist / eye.max_range);
-                if (signal > outputs[out_idx]) {
-                    outputs[out_idx] = signal;
-                }
-            }
+            process_eyes(cfg.eyes, 0, angle, dist_sq, food_ch);
+            process_eyes(cfg.long_range_eyes, long_range_offset, angle, dist_sq, food_ch);
         }
     }
 
-    // --- Proprioceptive sensors (appended at end) ---
-    int proprio_idx = n_eyes * n_channels;
+    // --- Proprioceptive sensors (appended after both eye tiers) ---
+    int proprio_idx = (n_short_eyes + n_long_eyes) * n_channels;
     if (cfg.has_speed_sensor) {
         float speed = self.body.velocity.length();
         float max_speed = config.max_speed;

@@ -159,6 +159,32 @@
                 "maxRange": 100
             }
         ],
+        "longRangeEyes": [
+            {
+                "id": 0,
+                "centerAngleDeg": 0,
+                "arcWidthDeg": 25,
+                "maxRange": 300
+            },
+            {
+                "id": 1,
+                "centerAngleDeg": 90,
+                "arcWidthDeg": 25,
+                "maxRange": 300
+            },
+            {
+                "id": 2,
+                "centerAngleDeg": 180,
+                "arcWidthDeg": 25,
+                "maxRange": 300
+            },
+            {
+                "id": 3,
+                "centerAngleDeg": -90,
+                "arcWidthDeg": 25,
+                "maxRange": 300
+            }
+        ],
         "channels": [
             "food",
             "same",
