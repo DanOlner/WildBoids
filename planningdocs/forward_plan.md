@@ -2440,3 +2440,104 @@ The simplest addition that's most "biologically different" from compound eyes wo
 
 The most *interesting* addition for co-evolution would be **echolocation** (active, costly, directional) or **thrust-detection** (passive, creates stealth/speed dilemma). These add behavioural dimensions that pure distance sensing can't.
 
+---
+
+## Option M — Two-Tier Vision: Evolvable Short-Range + Positional Long-Range Eyes
+
+**Goal:** Implement long-range coarse eyes alongside the existing short-range compound eyes, with *different* evolutionary degrees of freedom for each tier. Short-range eyes evolve their arc size (allowing dense frontal clustering like biological compound eyes). Long-range eyes keep fixed arc widths but evolve their angular position around the body (scanning the horizon from different directions).
+
+**Motivation:** This creates a biologically-inspired two-scale visual system where close-up vision is high-resolution and morphologically flexible, while distant vision is coarse but repositionable. Evolution gets to shape *what* the boid looks at carefully (short range) vs *where* the boid scans for distant threats/opportunities (long range). The different evolutionary knobs prevent the two tiers from converging to the same solution.
+
+### Tier 1 — Short-range compound eyes (evolvable arc width)
+
+These are the existing compound eyes (Option L), extended with arc-width evolution:
+
+- **Count:** Fixed (e.g. 8 eyes) — total count doesn't change during a run, preserving NEAT genome compatibility
+- **Angular positions:** Evenly spaced around 360° (fixed)
+- **Arc width:** *Evolvable per eye* — each eye has a mutable `arc_width` gene
+  - Mutation: Gaussian perturbation (sigma ~5°), clamped to [5°, 120°]
+  - Crossover: per-eye blend or random parent selection
+- **Range:** Fixed (e.g. 100 units) — same as current compound eyes
+- **Channels:** 3 per eye (food, same-type, opposite-type) as in Option L
+- **Evolutionary dynamics:** Eyes can evolve from uniform 45° arcs to asymmetric layouts — narrow forward eyes for precise food targeting, wide rear eyes for predator awareness. Overlapping arcs are allowed (two narrow eyes covering the same forward zone gives redundant but higher-fidelity frontal vision, like a biological fovea).
+
+**Constraint:** Total eye count is fixed, so NEAT input count stays constant. Arc widths can overlap or leave gaps — evolution discovers whether full coverage or dense forward clustering pays off.
+
+### Tier 2 — Long-range narrow eyes (evolvable position)
+
+A second ring of fewer, *narrow* eyes with much longer range — like directional searchlights that only detect things within a tight beam. No arc-width evolution; instead, evolution controls where each beam points.
+
+- **Count:** Fixed (e.g. 4 eyes) — fewer than short-range
+- **Arc width:** Fixed and narrow (e.g. 20–30° each) — deliberately leaving large blind zones at long range
+- **Angular position:** *Evolvable per eye* — each eye has a mutable `center_angle` gene
+  - Mutation: Gaussian perturbation (sigma ~10–15°), wrapping at ±π
+  - Crossover: per-eye blend or random parent selection
+- **Range:** Fixed, much longer (e.g. 300–400 units, 3–4× the short-range eyes)
+- **Channels:** Same 3 channels per eye (food, same-type, opposite-type), or possibly a reduced set (e.g. boids-only — food is rarely relevant at 400 units)
+- **Signal quality:** Because the arcs are narrow, a detection is angularly informative — "something is *that way*" — but coverage is sparse. Most of the long-range horizon is invisible at any given moment.
+- **Evolutionary dynamics:** The narrow arcs mean detection in a long-range eye carries directional meaning — NEAT can learn "signal in long-range eye 2 → turn left" because the beam points in a specific, evolved direction. Critically, most of the distant environment is *undetected*, so where evolution points these beams matters enormously. Predators might cluster all 4 beams in a forward cone for pursuit lock-on; prey might fan them rearward and laterally for early escape triggering. With only 4 narrow beams, every angular degree of positioning is a consequential evolutionary trade-off — a beam watching your rear can't also scan ahead.
+
+### Combined input layout
+
+| Component | Eyes | Channels | Inputs |
+|-----------|------|----------|--------|
+| Short-range compound eyes | 8 | 3 | 24 |
+| Long-range coarse eyes | 4 | 3 | 12 |
+| Speed proprioception | — | — | 1 |
+| **Total** | **12** | — | **37** |
+
+With 6 thrusters: 37 × 6 = 222 initial NEAT connections. This is at the upper end of the "rich" range from the sensor-actuator analysis above. If this proves too heavy for early evolution, options:
+- Reduce long-range eyes to 3 (27 + 9 + 1 = 37 → 28 inputs)
+- Reduce long-range channels to 2 (opposite-type + same-type, no food) → 24 + 8 + 1 = 33 inputs
+- Start with fewer short-range eyes (6 × 3 + 4 × 3 + 1 = 31 inputs)
+
+### Morphology genome
+
+Each boid gets a morphology genome alongside its NEAT genome:
+
+```
+short_range_eyes: [arc_width_0, arc_width_1, ..., arc_width_7]    # radians, evolvable
+long_range_eyes:  [center_angle_0, center_angle_1, ..., center_angle_3]  # radians, evolvable
+```
+
+- **Mutation:** Applied independently per gene with per-gene mutation probability (~10–20%)
+- **Crossover:** Per-gene random parent selection (simpler than blend, avoids averaging away specialisation)
+- **Speciation:** Morphology distance incorporated into NEAT compatibility metric with a separate coefficient `c_morph`. This prevents crossover between boids with radically different eye layouts (which would scramble NEAT wiring).
+- **Co-inheritance:** Morphology genome and NEAT genome always travel together — they're part of the same individual. A narrow forward eye is only useful if NEAT has learned to use those specific input nodes for fine-grained steering.
+
+### Implementation plan
+
+**Step M.1 — Compound eye refactor (Option L Phase 1)**
+Prerequisite: implement the unified multi-channel compound eye system from Option L. Fixed layout, no morphology evolution yet. This gives us the base sensor architecture to build on.
+
+**Step M.2 — Long-range coarse eyes (fixed positions)**
+Add the second tier of eyes with fixed, evenly-spaced positions. Same `SensorySystem::perceive()` loop, just with different range/arc parameters. Verify that long-range eyes detect entities at 300+ units and short-range eyes don't. New tests for two-tier perception.
+
+**Step M.3 — Morphology genome infrastructure**
+Create a `MorphologyGenome` struct holding per-eye parameters. Implement mutation, crossover, and distance functions. Wire into `Population` so it's inherited alongside the NEAT genome. No actual evolution yet — just the data structures and operators.
+
+**Step M.4 — Evolvable short-range arc width**
+Connect `MorphologyGenome::short_range_arc_widths` to the compound eye system. Each eye reads its arc width from the morphology genome instead of from a fixed config value. Run evolution to see if arc widths diverge from uniform.
+
+**Step M.5 — Evolvable long-range eye position**
+Connect `MorphologyGenome::long_range_center_angles` to the coarse eye system. Each long-range eye reads its angular position from the morphology genome. Run evolution to see if positions diverge from uniform spacing.
+
+**Step M.6 — Renderer visualisation**
+Draw both eye tiers in the debug sensor overlay (S key). Short-range eyes as current wedges, long-range eyes as longer, translucent wedges in a different colour. Show arc width variation visually.
+
+**Step M.7 — Evolution experiments**
+- Prey-only with two-tier eyes: does frontal clustering emerge in short-range eyes?
+- Co-evolution: do prey evolve rear-biased long-range eyes? Do predators evolve forward-clustered long-range eyes?
+- Compare fitness curves: two-tier vs single-tier (short-range only) to quantify the benefit of long-range coarse vision
+
+### Why different evolutionary knobs for each tier?
+
+Allowing both tiers to evolve both position and arc width would work but creates a much larger morphology search space and risks the two tiers converging to similar configurations (defeating the purpose of having two scales). The asymmetric constraints — arc width for short, position for long — create a cleaner separation:
+
+- **Short-range:** "How finely do I examine things nearby?" (precision vs coverage trade-off via arc width)
+- **Long-range:** "Where do I point my searchlights?" (directional awareness trade-off via beam position)
+
+The narrow fixed arcs on long-range eyes are key to making position evolution meaningful. If long-range arcs were wide (e.g. 90°), four eyes would cover most of the horizon regardless of positioning — there'd be little selection pressure on where they point. With narrow beams (20–30°), four eyes cover only ~80–120° of the 360° horizon, leaving most of long range invisible. This makes every evolved beam direction a consequential choice: a boid that wastes a beam pointing into empty space behind it pays a real cost. It also means that a detection event in a narrow beam carries strong directional information — NEAT can wire "long-range eye 3 fired → turn right" because it knows eye 3 points in a specific direction. Wide arcs would give "something is vaguely over there" which is less actionable for steering.
+
+This mirrors biology: insect compound eyes have fixed ommatidia positions but varying facet sizes (resolution), while vertebrate eyes have fixed optics but movable direction (saccades, head turning). We're giving each tier its own biologically-distinct degree of freedom.
+
