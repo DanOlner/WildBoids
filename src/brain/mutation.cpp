@@ -20,9 +20,34 @@ void mutate_weights(NeatGenome& genome, std::mt19937& rng,
     }
 }
 
+// Check if 'target_id' can reach 'source_id' through existing feed-forward connections.
+// If so, adding source→target would create a cycle, meaning it must be recurrent.
+static bool creates_cycle(const NeatGenome& genome, int source_id, int target_id) {
+    // DFS from target through non-recurrent connections to see if we reach source
+    std::unordered_set<int> visited;
+    std::vector<int> stack = {target_id};
+
+    while (!stack.empty()) {
+        int current = stack.back();
+        stack.pop_back();
+        if (current == source_id) return true;
+        if (visited.count(current)) continue;
+        visited.insert(current);
+
+        for (const auto& c : genome.connections) {
+            if (!c.enabled || c.recurrent) continue;
+            if (c.source == current) {
+                stack.push_back(c.target);
+            }
+        }
+    }
+    return false;
+}
+
 bool mutate_add_connection(NeatGenome& genome, std::mt19937& rng,
                            InnovationTracker& tracker,
-                           int max_attempts) {
+                           int max_attempts,
+                           bool allow_recurrent) {
     if (genome.nodes.size() < 2) return false;
 
     // Build set of existing connections for quick lookup
@@ -36,28 +61,43 @@ bool mutate_add_connection(NeatGenome& genome, std::mt19937& rng,
     for (int attempt = 0; attempt < max_attempts; ++attempt) {
         int si = node_dist(rng);
         int ti = node_dist(rng);
-        if (si == ti) continue;
 
         const auto& src = genome.nodes[si];
         const auto& tgt = genome.nodes[ti];
 
-        // Don't connect output → input (wrong direction for feed-forward)
-        // Don't connect to an input node or from an output node
+        // Never connect TO an input node (inputs only receive external sensor data)
         if (tgt.type == NodeType::Input) continue;
-        if (src.type == NodeType::Output && tgt.type == NodeType::Output) continue;
 
-        // Check for existing connection in either direction
+        // Check for existing connection
         if (existing.count({src.id, tgt.id})) continue;
 
-        // For feed-forward: don't create cycles.
-        // Simple heuristic: inputs can connect to hidden/output,
-        // hidden can connect to hidden/output, output can't be a source
-        // (unless connecting to hidden, which we allow for now — topological sort handles it)
-        if (src.type == NodeType::Output) continue;
+        if (allow_recurrent) {
+            // Allow self-connections on hidden nodes (always recurrent)
+            bool is_self = (si == ti);
+            if (is_self && src.type != NodeType::Hidden) continue;
 
-        int innov = tracker.get_or_create(src.id, tgt.id);
-        genome.connections.push_back({innov, src.id, tgt.id, 0.0f, true});
-        return true;
+            // Don't allow output→output (not useful)
+            if (src.type == NodeType::Output && tgt.type == NodeType::Output) continue;
+
+            // Determine if this connection is recurrent
+            bool is_recurrent = is_self || creates_cycle(genome, src.id, tgt.id);
+
+            // Output nodes can only be sources of recurrent connections
+            if (src.type == NodeType::Output && !is_recurrent) continue;
+
+            int innov = tracker.get_or_create(src.id, tgt.id);
+            genome.connections.push_back({innov, src.id, tgt.id, 0.0f, true, is_recurrent});
+            return true;
+        } else {
+            // Feed-forward only: original constraints
+            if (si == ti) continue;
+            if (src.type == NodeType::Output && tgt.type == NodeType::Output) continue;
+            if (src.type == NodeType::Output) continue;
+
+            int innov = tracker.get_or_create(src.id, tgt.id);
+            genome.connections.push_back({innov, src.id, tgt.id, 0.0f, true, false});
+            return true;
+        }
     }
 
     return false;

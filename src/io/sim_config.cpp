@@ -111,6 +111,7 @@ SimConfig load_sim_config(const std::string& path) {
         cfg.neat.survival_rate = n.value("survivalRate", cfg.neat.survival_rate);
         cfg.neat.elitism = n.value("elitism", cfg.neat.elitism);
         cfg.neat.max_stagnation = n.value("maxStagnation", cfg.neat.max_stagnation);
+        cfg.neat.allow_recurrent = n.value("recurrent", cfg.neat.allow_recurrent);
     }
 
     return cfg;

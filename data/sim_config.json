@@ -42,6 +42,7 @@
         "saveInterval": 10
     },
     "neat": {
+        "recurrent": true,
         "addNodeProb": 0.1,
         "addConnectionProb": 0.1,
         "weightMutateProb": 0.8,

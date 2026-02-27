@@ -5,9 +5,9 @@
 #include <vector>
 #include <unordered_map>
 
-// Feed-forward NEAT network built from a NeatGenome.
-// Nodes are evaluated in topological order; cycles are not supported
-// (recurrent connections would need a different activation strategy).
+// NEAT network built from a NeatGenome.
+// Feed-forward connections are evaluated in topological order within a tick.
+// Recurrent connections read the previous tick's node values (one-tick delay).
 class NeatNetwork : public ProcessingNetwork {
 public:
     explicit NeatNetwork(const NeatGenome& genome);
@@ -24,13 +24,14 @@ private:
         float bias = 0.0f;
         ActivationFn activation = ActivationFn::Sigmoid;
         float value = 0.0f;
-        float incoming_sum = 0.0f;
+        float prev_value = 0.0f;  // previous tick's value (for recurrent connections)
     };
 
     struct RuntimeConnection {
         int source_idx; // index into nodes_
         int target_idx; // index into nodes_
         float weight;
+        bool recurrent = false;  // if true, reads prev_value instead of value
     };
 
     std::vector<RuntimeNode> nodes_;

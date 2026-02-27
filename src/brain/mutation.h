@@ -14,9 +14,12 @@ void mutate_weights(NeatGenome& genome, std::mt19937& rng,
 // Add a new connection between two previously unconnected nodes.
 // Returns true if a connection was added, false if the genome is already fully connected
 // or no valid connection could be found after max_attempts tries.
+// When allow_recurrent is true, backward and self-connections are permitted
+// (marked as recurrent — they read the previous tick's value during activation).
 bool mutate_add_connection(NeatGenome& genome, std::mt19937& rng,
                            InnovationTracker& tracker,
-                           int max_attempts = 20);
+                           int max_attempts = 20,
+                           bool allow_recurrent = false);
 
 // Split an existing enabled connection by inserting a hidden node.
 // The original connection is disabled. Two new connections are created:

@@ -177,6 +177,7 @@ BoidSpec load_boid_spec(const std::string& path) {
             cg.target = jc.at("target").get<int>();
             cg.weight = jc.at("weight").get<float>();
             cg.enabled = jc.value("enabled", true);
+            cg.recurrent = jc.value("recurrent", false);
             genome.connections.push_back(cg);
         }
 
@@ -291,6 +292,7 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
             jc["target"] = cg.target;
             jc["weight"] = cg.weight;
             jc["enabled"] = cg.enabled;
+            if (cg.recurrent) jc["recurrent"] = true;
             jg["connections"].push_back(jc);
         }
 

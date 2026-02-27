@@ -109,7 +109,7 @@ void Population::mutate(NeatGenome& genome) {
                        params_.weight_sigma, params_.weight_replace_prob);
     }
     if (coin(rng_) < params_.add_connection_prob) {
-        mutate_add_connection(genome, rng_, tracker_);
+        mutate_add_connection(genome, rng_, tracker_, 20, params_.allow_recurrent);
     }
     if (coin(rng_) < params_.add_node_prob) {
         mutate_add_node(genome, rng_, tracker_);

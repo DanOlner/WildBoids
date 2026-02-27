@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "brain/mutation.h"
 #include "brain/neat_network.h"
+#include "io/boid_spec.h"
 #include <cmath>
 #include <set>
 #include <algorithm>
@@ -355,4 +356,98 @@ TEST_CASE("Many mutations produce diverse genomes", "[mutation]") {
     auto [min_c, max_c] = std::minmax_element(conn_counts.begin(), conn_counts.end());
     CHECK(*max_n > *min_n);   // different node counts
     CHECK(*max_c > *min_c);   // different connection counts
+}
+
+// ---- Recurrent connection mutations ----
+
+TEST_CASE("mutate_add_connection: allow_recurrent=false produces no recurrent connections", "[mutation]") {
+    NeatGenome genome = make_minimal(3, 2);
+    // Add hidden nodes to create room for connections
+    genome.nodes.push_back({10, NodeType::Hidden, ActivationFn::Sigmoid, 0.0f});
+    genome.nodes.push_back({11, NodeType::Hidden, ActivationFn::Sigmoid, 0.0f});
+
+    InnovationTracker tracker(100);
+    std::mt19937 rng(42);
+
+    for (int i = 0; i < 50; ++i) {
+        mutate_add_connection(genome, rng, tracker, 20, false);
+    }
+
+    for (const auto& c : genome.connections) {
+        CHECK_FALSE(c.recurrent);
+    }
+}
+
+TEST_CASE("mutate_add_connection: allow_recurrent=true produces some recurrent connections", "[mutation]") {
+    // Build a genome with hidden nodes so backward connections are possible
+    NeatGenome genome = make_minimal(3, 2);
+    InnovationTracker tracker(100);
+    std::mt19937 rng(42);
+
+    // Add several hidden nodes via node splits
+    for (int i = 0; i < 5; ++i) {
+        mutate_add_node(genome, rng, tracker);
+    }
+
+    // Now repeatedly add connections with recurrent allowed
+    for (int i = 0; i < 100; ++i) {
+        mutate_add_connection(genome, rng, tracker, 20, true);
+    }
+
+    int recurrent_count = 0;
+    for (const auto& c : genome.connections) {
+        if (c.recurrent) ++recurrent_count;
+    }
+    CHECK(recurrent_count > 0);
+}
+
+TEST_CASE("Recurrent genome round-trip through save/load", "[mutation]") {
+    // Build a genome with some recurrent connections
+    NeatGenome genome = make_minimal(3, 2);
+    InnovationTracker tracker(100);
+    std::mt19937 rng(42);
+
+    for (int i = 0; i < 5; ++i) {
+        mutate_add_node(genome, rng, tracker);
+    }
+    for (int i = 0; i < 50; ++i) {
+        mutate_add_connection(genome, rng, tracker, 20, true);
+    }
+
+    // Verify we have at least one recurrent connection
+    int recurrent_count = 0;
+    for (const auto& c : genome.connections) {
+        if (c.recurrent) ++recurrent_count;
+    }
+    REQUIRE(recurrent_count > 0);
+
+    // Build a BoidSpec with this genome and round-trip through JSON
+    BoidSpec spec;
+    spec.version = "1.0";
+    spec.type = "prey";
+    spec.mass = 1.0f;
+    spec.moment_of_inertia = 0.5f;
+    spec.initial_energy = 100.0f;
+    spec.genome = genome;
+
+    // Add a minimal thruster so save doesn't fail
+    ThrusterSpec ts;
+    ts.id = 0;
+    ts.label = "test";
+    ts.position = {0.0f, 0.0f};
+    ts.direction = {0.0f, 1.0f};
+    ts.max_thrust = 1.0f;
+    spec.thrusters.push_back(ts);
+
+    const std::string tmp_path = "/tmp/test_recurrent_roundtrip.json";
+    save_boid_spec(spec, tmp_path);
+    BoidSpec loaded = load_boid_spec(tmp_path);
+
+    REQUIRE(loaded.genome.has_value());
+    CHECK(loaded.genome->connections.size() == genome.connections.size());
+
+    // Verify recurrent flags match
+    for (size_t i = 0; i < genome.connections.size(); ++i) {
+        CHECK(loaded.genome->connections[i].recurrent == genome.connections[i].recurrent);
+    }
 }

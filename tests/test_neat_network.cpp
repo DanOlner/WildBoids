@@ -233,3 +233,167 @@ TEST_CASE("NeatNetwork: polymorphic use via ProcessingNetwork", "[neat_network]"
     CHECK_THAT(outputs[0], WithinAbs(sigmoid(3.0f), 1e-5f));
     CHECK_THAT(outputs[1], WithinAbs(0.5f, 1e-6f));
 }
+
+// ---- Recurrent connection tests ----
+
+TEST_CASE("Recurrent: self-connection provides memory", "[neat_network][recurrent]") {
+    // input(0) → hidden(2) → output(1), plus hidden(2) → hidden(2) recurrent self-connection
+    NeatGenome g;
+    g.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    g.nodes.push_back({1, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    g.nodes.push_back({2, NodeType::Hidden, ActivationFn::Tanh, 0.0f});
+
+    g.connections.push_back({1, 0, 2, 1.0f, true, false});  // in → hidden (ff)
+    g.connections.push_back({2, 2, 1, 2.0f, true, false});  // hidden → out (ff)
+    g.connections.push_back({3, 2, 2, 0.9f, true, true});   // hidden → hidden (recurrent self)
+
+    NeatNetwork net(g);
+
+    // Tick 1: input=1.0, hidden prev_value=0 (fresh network)
+    // hidden = tanh(1.0*1.0 + 0*0.9) = tanh(1.0)
+    float input = 1.0f;
+    float output = 0.0f;
+    net.activate(&input, 1, &output, 1);
+    float h1 = std::tanh(1.0f);
+    float expected1 = sigmoid(h1 * 2.0f);
+    CHECK_THAT(output, WithinAbs(expected1, 1e-5f));
+
+    // Tick 2: input=0.0, hidden prev_value=h1 (from tick 1)
+    // hidden = tanh(0*1.0 + h1*0.9) = tanh(h1*0.9)
+    input = 0.0f;
+    net.activate(&input, 1, &output, 1);
+    float h2 = std::tanh(h1 * 0.9f);
+    float expected2 = sigmoid(h2 * 2.0f);
+    CHECK_THAT(output, WithinAbs(expected2, 1e-5f));
+
+    // Key: output on tick 2 is NOT sigmoid(0) — the self-connection provides memory
+    CHECK(output > 0.5f + 0.01f);  // noticeably above sigmoid(0)=0.5
+
+    // Tick 3: input still 0, hidden prev_value=h2 (decaying)
+    net.activate(&input, 1, &output, 1);
+    float h3 = std::tanh(h2 * 0.9f);
+    float expected3 = sigmoid(h3 * 2.0f);
+    CHECK_THAT(output, WithinAbs(expected3, 1e-5f));
+
+    // Signal should be decaying toward 0.5
+    CHECK(output < expected2);
+    CHECK(output > 0.5f);
+}
+
+TEST_CASE("Recurrent: output-to-hidden reads previous tick", "[neat_network][recurrent]") {
+    // input(0) → output(1) feed-forward, output(1) → hidden(2) recurrent, hidden(2) → output(1) ff
+    NeatGenome g;
+    g.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    g.nodes.push_back({1, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    g.nodes.push_back({2, NodeType::Hidden, ActivationFn::Tanh, 0.0f});
+
+    g.connections.push_back({1, 0, 1, 2.0f, true, false});  // in → out (ff)
+    g.connections.push_back({2, 1, 2, 1.0f, true, true});   // out → hidden (recurrent)
+    g.connections.push_back({3, 2, 1, 1.0f, true, false});  // hidden → out (ff)
+
+    NeatNetwork net(g);
+
+    // Tick 1: all prev_values are 0
+    // hidden = tanh(prev_out*1.0) = tanh(0) = 0
+    // output = sigmoid(input*2.0 + hidden*1.0) = sigmoid(2.0 + 0)
+    float input = 1.0f;
+    float output = 0.0f;
+    net.activate(&input, 1, &output, 1);
+    float h1 = std::tanh(0.0f);  // prev output was 0
+    float expected1 = sigmoid(1.0f * 2.0f + h1 * 1.0f);
+    CHECK_THAT(output, WithinAbs(expected1, 1e-5f));
+
+    // Tick 2: prev output = expected1, prev hidden = h1
+    // hidden = tanh(expected1 * 1.0) — reads previous output via recurrent connection
+    // output = sigmoid(input*2.0 + hidden*1.0)
+    float out1 = output;
+    net.activate(&input, 1, &output, 1);
+    float h2 = std::tanh(out1 * 1.0f);
+    float expected2 = sigmoid(1.0f * 2.0f + h2 * 1.0f);
+    CHECK_THAT(output, WithinAbs(expected2, 1e-5f));
+
+    // Tick 2 output should differ from tick 1 (recurrent feedback changes it)
+    CHECK(std::abs(output - expected1) > 0.01f);
+}
+
+TEST_CASE("Recurrent: zero recurrent connections = identical to feed-forward", "[neat_network][recurrent]") {
+    // Build a feed-forward network (no recurrent flags set)
+    NeatGenome g;
+    g.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    g.nodes.push_back({1, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    g.nodes.push_back({2, NodeType::Hidden, ActivationFn::Tanh, 0.0f});
+
+    g.connections.push_back({1, 0, 2, 1.5f, true, false});
+    g.connections.push_back({2, 2, 1, 2.0f, true, false});
+
+    NeatNetwork net(g);
+
+    float input = 0.7f;
+    float output1 = 0.0f, output2 = 0.0f;
+
+    // Two activations with same input should give same output (no state)
+    net.activate(&input, 1, &output1, 1);
+    net.activate(&input, 1, &output2, 1);
+
+    CHECK_THAT(output1, WithinAbs(output2, 1e-6f));
+
+    // And the expected value
+    float hidden = std::tanh(0.7f * 1.5f);
+    float expected = sigmoid(hidden * 2.0f);
+    CHECK_THAT(output1, WithinAbs(expected, 1e-5f));
+}
+
+TEST_CASE("Recurrent: reset clears recurrent state", "[neat_network][recurrent]") {
+    // Same self-connection network as the memory test
+    NeatGenome g;
+    g.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    g.nodes.push_back({1, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    g.nodes.push_back({2, NodeType::Hidden, ActivationFn::Tanh, 0.0f});
+
+    g.connections.push_back({1, 0, 2, 1.0f, true, false});
+    g.connections.push_back({2, 2, 1, 2.0f, true, false});
+    g.connections.push_back({3, 2, 2, 0.9f, true, true});  // recurrent self
+
+    NeatNetwork net(g);
+
+    // Activate with input=1 to build up state
+    float input = 1.0f;
+    float output = 0.0f;
+    net.activate(&input, 1, &output, 1);
+    net.activate(&input, 1, &output, 1);
+
+    // Now reset
+    net.reset();
+
+    // After reset, activating with same input should match a fresh network
+    NeatNetwork fresh(g);
+    float output_reset = 0.0f, output_fresh = 0.0f;
+    net.activate(&input, 1, &output_reset, 1);
+    fresh.activate(&input, 1, &output_fresh, 1);
+
+    CHECK_THAT(output_reset, WithinAbs(output_fresh, 1e-6f));
+}
+
+TEST_CASE("Recurrent: cycle via recurrent connection activates correctly", "[neat_network][recurrent]") {
+    // Create a would-be cycle: input(0) → hidden(2) → output(1) → hidden(2)
+    // The output→hidden connection is recurrent, breaking the cycle
+    NeatGenome g;
+    g.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    g.nodes.push_back({1, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    g.nodes.push_back({2, NodeType::Hidden, ActivationFn::Tanh, 0.0f});
+
+    g.connections.push_back({1, 0, 2, 1.0f, true, false});  // in → hidden (ff)
+    g.connections.push_back({2, 2, 1, 1.0f, true, false});  // hidden → out (ff)
+    g.connections.push_back({3, 1, 2, 0.5f, true, true});   // out → hidden (recurrent)
+
+    // Should construct and activate without crashing
+    NeatNetwork net(g);
+
+    float input = 1.0f;
+    float output = 0.0f;
+    net.activate(&input, 1, &output, 1);
+
+    CHECK(std::isfinite(output));
+    CHECK(output >= 0.0f);
+    CHECK(output <= 1.0f);
+}

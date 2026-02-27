@@ -36,6 +36,9 @@ struct PopulationParams {
 
     // Stagnation
     int max_stagnation = 15;      // species removed after this many gens without improvement
+
+    // Recurrent connections
+    bool allow_recurrent = false;  // if true, mutations can create backward/self connections
 };
 
 class Population {

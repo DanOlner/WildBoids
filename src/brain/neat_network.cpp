@@ -23,7 +23,7 @@ NeatNetwork::NeatNetwork(const NeatGenome& genome) {
         }
     }
 
-    // Build connection array (enabled only)
+    // Build connection array (enabled only), preserving recurrent flag
     for (const auto& cg : genome.connections) {
         if (!cg.enabled) continue;
 
@@ -31,7 +31,7 @@ NeatNetwork::NeatNetwork(const NeatGenome& genome) {
         auto tgt_it = id_to_index_.find(cg.target);
         if (src_it == id_to_index_.end() || tgt_it == id_to_index_.end()) continue;
 
-        connections_.push_back({src_it->second, tgt_it->second, cg.weight});
+        connections_.push_back({src_it->second, tgt_it->second, cg.weight, cg.recurrent});
     }
 
     // Build per-node incoming connection lists
@@ -46,7 +46,9 @@ NeatNetwork::NeatNetwork(const NeatGenome& genome) {
 void NeatNetwork::build_eval_order() {
     int n = static_cast<int>(nodes_.size());
 
-    // Compute in-degree for non-input nodes (from enabled connections only)
+    // Compute in-degree for non-input nodes from feed-forward connections only.
+    // Recurrent connections are excluded — they read the previous tick's value
+    // and don't create ordering dependencies.
     std::vector<int> in_degree(n, 0);
     std::vector<std::vector<int>> dependents(n); // node idx → list of nodes it feeds into
 
@@ -54,6 +56,7 @@ void NeatNetwork::build_eval_order() {
     std::unordered_set<int> input_set(input_indices_.begin(), input_indices_.end());
 
     for (const auto& c : connections_) {
+        if (c.recurrent) continue;  // skip recurrent connections for topological sort
         if (!input_set.count(c.target_idx)) {
             in_degree[c.target_idx]++;
         }
@@ -65,7 +68,7 @@ void NeatNetwork::build_eval_order() {
     for (int idx : input_indices_) {
         ready.push(idx);
     }
-    // Also add any non-input nodes with no incoming connections
+    // Also add any non-input nodes with no incoming feed-forward connections
     for (int i = 0; i < n; ++i) {
         if (!input_set.count(i) && in_degree[i] == 0) {
             ready.push(i);
@@ -98,6 +101,11 @@ void NeatNetwork::build_eval_order() {
 
 void NeatNetwork::activate(const float* inputs, int n_in,
                             float* outputs, int n_out) {
+    // Save previous tick's values for recurrent connections
+    for (auto& node : nodes_) {
+        node.prev_value = node.value;
+    }
+
     // Load input values (Linear activation = pass-through)
     int actual_in = std::min(n_in, static_cast<int>(input_indices_.size()));
     for (int i = 0; i < actual_in; ++i) {
@@ -109,11 +117,16 @@ void NeatNetwork::activate(const float* inputs, int n_in,
     }
 
     // Evaluate each node in topological order: accumulate inputs then activate.
-    // This ensures hidden node values are computed before downstream nodes read them.
+    // Feed-forward connections read current tick values (already computed upstream).
+    // Recurrent connections read previous tick values (stored in prev_value).
     for (int idx : eval_order_) {
         float sum = nodes_[idx].bias;
         for (const auto& c : incoming_[idx]) {
-            sum += nodes_[c.source_idx].value * c.weight;
+            if (c.recurrent) {
+                sum += nodes_[c.source_idx].prev_value * c.weight;
+            } else {
+                sum += nodes_[c.source_idx].value * c.weight;
+            }
         }
         nodes_[idx].value = apply_activation(nodes_[idx].activation, sum);
     }
@@ -132,7 +145,7 @@ void NeatNetwork::activate(const float* inputs, int n_in,
 void NeatNetwork::reset() {
     for (auto& node : nodes_) {
         node.value = 0.0f;
-        node.incoming_sum = 0.0f;
+        node.prev_value = 0.0f;
     }
 }
 

@@ -18,6 +18,7 @@ struct ConnectionGene {
     int target;
     float weight = 0.0f;
     bool enabled = true;
+    bool recurrent = false;  // true if this is a backward/self connection (reads prev tick)
 };
 
 struct NeatGenome {
