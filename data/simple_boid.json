@@ -17,19 +17,19 @@
         {
             "id": 1,
             "label": "left_rear",
-            "positionX": -0.3,
-            "positionY": -0.4,
-            "directionX": 1.0,
-            "directionY": 0.0,
+            "positionX": -0.35,
+            "positionY": -0.6,
+            "directionX": 0.7,
+            "directionY": 0.3,
             "maxThrust": 4.0
         },
         {
             "id": 2,
             "label": "right_rear",
-            "positionX": 0.3,
-            "positionY": -0.4,
-            "directionX": -1.0,
-            "directionY": 0.0,
+            "positionX": 0.35,
+            "positionY": -0.6,
+            "directionX": -0.7,
+            "directionY": 0.3,
             "maxThrust": 4.0
         },
         {

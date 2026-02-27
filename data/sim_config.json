@@ -1,7 +1,7 @@
 {
     "world": {
-        "width": 2000,
-        "height": 2000,
+        "width": 1000,
+        "height": 1000,
         "toroidal": true,
         "linearDrag": 0.1,
         "angularDrag": 1.75,
@@ -9,7 +9,7 @@
     },
     "food": {
         "mode": "patches",
-        "numPatches": 10,
+        "numPatches": 2,
         "foodPerPatch": 20,
         "patchRadius": 30.0,
         "eatRadius": 10.0,

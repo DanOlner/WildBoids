@@ -24,6 +24,8 @@ A truly agile body needs to control translation and rotation *independently* (ho
 
 If these are always coupled, the boid can't turn in place or strafe, limiting tactical options like orbiting prey or dodging. Cars are non-holonomic (must turn to change direction); drones/crabs are holonomic.
 
+
+
 ### Torque and Lever Arms
 
 Rotational agility = torque = force x distance from centre of mass. Thrusters placed far from the CoM with a tangential component give the most rotational authority per unit force. Thrusters clustered near the centre make the boid translationally capable but rotationally sluggish.
@@ -43,6 +45,153 @@ In frictionless 2D, spinning never stops. Without counter-torque capability, evo
 - **Gimballing (variable angle):** expands the reachable set further
 
 More continuous control = smoother evolved behaviours, but harder search space.
+
+## Fixed Thruster Arrangements for Full Holonomic Control
+
+### The test
+
+In 2D, full holonomic control means independently commanding 3 degrees of freedom: **Fx** (lateral force), **Fy** (longitudinal force), and **τ** (torque). Each thruster i at body-frame position **(px, py)** firing in direction **(dx, dy)** produces a column vector in force-torque space:
+
+```
+ci = (dx, dy, px*dy - py*dx)
+         Fx  Fy     torque
+```
+
+Because thrusters are **unidirectional** (power ∈ [0, 1], never negative), the attainable set is the **conical hull** of these column vectors — the set of all non-negative linear combinations. For full holonomic control, the columns must **positively span R³**, meaning any (Fx, Fy, τ) target can be achieved with non-negative thruster powers.
+
+Key constraint: to positively span R^n you need at least **n + 1** vectors. So the minimum is **4 unidirectional thrusters** for 3-DOF 2D control. (With bidirectional thrusters that can push both ways, 3 suffices — but that's gimballing.)
+
+### Why some 4-thruster layouts fail
+
+**Opposed pairs through CoM:** Two pairs (e.g. ±X and ±Y) passing through the centre of mass. Every thruster has zero lever arm → zero torque. The columns are all (Fx, Fy, 0) — they only span a 2D plane in force-torque space. Full translation, zero rotation. **Not holonomic.**
+
+**All thrusters on one side:** If all thrusters produce torque of the same sign (e.g. all CCW), the attainable torque is only non-negative. Cannot produce CW rotation. **Not holonomic.**
+
+**Collinear force-torque columns:** If the column vectors, viewed as points in (Fx, Fy, τ) space, all lie in a plane through the origin, they can't span the full 3D volume. This happens when thruster positions and angles are too "regular" — e.g. 4 thrusters all firing tangentially in the same rotational sense.
+
+### 4-thruster arrangements that work
+
+**A. Pinwheel (alternating tangential, 90° spacing)**
+
+Four thrusters on the perimeter at compass points, each firing tangentially, alternating CW/CCW:
+
+```
+         (0, r) firing (+1, 0)    → column: (+1, 0, -r)    [CW torque]
+(-r, 0) firing (0, +1)           → column: (0, +1, +r)    [CCW torque]
+         (0, -r) firing (-1, 0)   → column: (-1, 0, -r)    [CW torque]
+(+r, 0) firing (0, -1)           → column: (0, -1, +r)    [CCW torque]
+```
+
+These 4 columns positively span R³. To get pure +τ, fire the two CCW thrusters equally — their Fx and Fy cancel, torques add. To get pure +Fx, combine thrusters to cancel Fy and τ. Classic spacecraft RCS arrangement.
+
+**B. X-configuration (4 canted thrusters at corners)**
+
+Four thrusters at (±r, ±r), each firing inward-and-tangential at ~45° to the radius. Produces 4 columns with mixed Fx, Fy, τ components that span the space. Common in satellite designs (the "X" or "diamond" layout).
+
+**C. Longitudinal + differential pair**
+
+Two centreline thrusters (fore/aft, zero torque) plus two off-centre thrusters that provide opposing torques:
+
+```
+rear:       (0, -r) firing (0, +1)    → (0, +1, 0)
+front:      (0, +r) firing (0, -1)    → (0, -1, 0)
+left-rear:  (-d, -r) firing (+1, 0)   → (+1, 0, +dr) [CCW]
+right-rear: (+d, -r) firing (-1, 0)   → (-1, 0, -dr) [CW]
+```
+
+This is close to wildboids' original 4-thruster layout. It **fails the full holonomic test**: the centreline thrusters give ±Fy with zero τ, and the differential pair give ±Fx with ±τ always coupled. You can get pure Fy and pure τ (fire both differential thrusters equally → Fx cancels, torques cancel... wait, no — they produce *opposing* torques, so equal firing gives zero τ and net Fx = 0). To get pure +Fx, fire left-rear only, but that also gives +τ. You can't get pure Fx without torque. **Not fully holonomic** — lateral force is always coupled to rotation.
+
+### 6-thruster arrangements that work
+
+Adding thrusters makes full holonomic control much easier to achieve. The extra columns provide redundancy, making it almost hard to *fail* if the layout has reasonable diversity.
+
+**D. Longitudinal + differential + strafe pair (current wildboids layout)**
+
+```
+rear:         (0, -0.5) firing (0, +1)           → (0, +1, 0)        [pure forward]
+left_rear:    (-0.35, -0.6) firing (0.92, 0.39)  → (+0.92, +0.39, +0.42)  [CCW + forward-right]
+right_rear:   (+0.35, -0.6) firing (-0.92, 0.39) → (-0.92, +0.39, -0.42)  [CW + forward-left]
+front:        (0, +0.5) firing (0, -1)            → (0, -1, 0)        [pure backward]
+strafe_left:  (0, 0) firing (-1, 0)               → (-1, 0, 0)        [pure left]
+strafe_right: (0, 0) firing (+1, 0)               → (+1, 0, 0)        [pure right]
+```
+
+**This is fully holonomic.** The strafe pair fills the gap the 4-thruster version had:
+- **Pure Fx:** fire strafe_left or strafe_right alone (zero τ, zero Fy)
+- **Pure Fy:** fire rear or front alone (zero τ, zero Fx)
+- **Pure +τ:** fire left_rear, cancel its Fx with strafe_left, cancel its Fy with front → net pure CCW torque
+- **Pure -τ:** symmetric using right_rear
+
+The 6 columns comfortably positively span R³ with redundancy.
+
+**Note on the torque thrusters' force "contamination":** The current left/right_rear thrusters produce mixed force+torque columns — e.g. left_rear gives (+0.92, +0.39, +0.42), so firing it alone pushes the boid forward-right *and* rotates it CCW. Pure torque requires a 3-thruster combination to cancel out the unwanted Fx and Fy. This works, but it's inefficient: energy is spent on force that gets cancelled by counter-thrust.
+
+Since we already have 4 thrusters covering the pure force axes (rear/front for ±Fy, strafe pair for ±Fx), we could reposition the torque pair to produce **pure or near-pure torque as a pair**, freeing them from double duty. Two options:
+
+**Option 1: Symmetric tangential pair.** Place two thrusters at equal distance from CoM, firing in opposite tangential directions:
+
+```
+torque_ccw:  (-0.5, 0.0) firing (0, +1)  → (0, +1, +0.5)
+torque_cw:   (+0.5, 0.0) firing (0, -1)  → (0, -1, +0.5)
+```
+
+Fired together at equal power: Fx cancels, Fy cancels, torques *add* → pure CCW rotation. Fired individually, each still contaminates Fy, but the pair gives clean torque. To get pure CW, swap which one fires (or reposition to allow it — see Option 2).
+
+**Option 2: Opposed tangential pair (pure torque per thruster pair, either direction).** Two thrusters at the same position but firing in opposite directions, offset from CoM:
+
+```
+torque_ccw:  (0, -0.5) firing (+1, 0)  → (+1, 0, +0.5)
+torque_cw:   (0, -0.5) firing (-1, 0)  → (-1, 0, -0.5)
+```
+
+Wait — these have opposite torque signs but also opposite Fx. Fired together: Fx cancels, τ cancels too. That's no good. Better: place them on opposite sides:
+
+```
+torque_ccw:  (-0.5, 0) firing (0, +1)  → (0, +1, +0.5)
+torque_cw:   (+0.5, 0) firing (0, +1)  → (0, +1, -0.5)
+```
+
+Fired together at equal power: Fx = 0, Fy = +2 (not zero — contaminates Fy). Pure torque as a pair is only achievable if the force components cancel, which requires the forces to point in *opposite* directions. But then the torques also oppose unless the lever arms differ. This is the fundamental constraint: **no single fixed thruster can produce pure torque** (it always produces force too), and getting pure torque from a pair requires their net forces to cancel while their torques add.
+
+**The cleanest pair for pure torque** is two thrusters at the same radius, diametrically opposite, both firing tangentially in the *same rotational sense*:
+
+```
+torque_a:  (-r, 0) firing (0, +1)  → (0, +1, +r)   [CCW, pushes forward]
+torque_b:  (+r, 0) firing (0, -1)  → (0, -1, +r)   [CCW, pushes backward]
+```
+
+Fired together: Fy cancels, Fx = 0, τ = +2r. **Pure CCW torque.** For CW, you need a second pair (or reverse the arrangement). This is exactly the pinwheel principle applied to a pair.
+
+**Practical upshot for the current 6-thruster layout:** The mixed force+torque columns aren't a *problem* for holonomic control (the math works), but they mean the boid wastes energy achieving pure rotation. If the torque thrusters were repositioned to fire tangentially from the widest points (e.g. (±0.5, 0) firing (0, ±1)), the boid could rotate without fighting its own translation thrusters. Whether this matters depends on the energy cost regime — if thrust is cheap, the waste is negligible; if expensive, cleaner torque = more efficient turning = evolutionary advantage.
+
+**However**, there's a counterargument for keeping the current "dirty" torque thrusters: they give NEAT **more interesting combinations to discover**. A thruster that does two things at once (turn + push) is a richer building block than one that does exactly one thing. Evolution might find that the coupling between rotation and forward thrust is *useful* — e.g. a "power turn" where the boid simultaneously rotates and accelerates. Pure-function thrusters are easier to reason about but may constrain the emergent behaviour vocabulary.
+
+**E. Perimeter ring (6 thrusters at 60° intervals)**
+
+Six thrusters equally spaced around the body edge, each firing tangentially (alternating CW/CCW):
+
+```
+Positions at angles 0°, 60°, 120°, 180°, 240°, 300° on a circle of radius r.
+Each fires tangentially, alternating direction.
+```
+
+Maximally symmetric, highly redundant, every direction equally accessible. The "ideal" arrangement if there's no preferred forward direction. Less natural for a boid that has a clear front/back.
+
+**F. Three opposed pairs**
+
+Three pairs through or near the CoM, each pair aligned to a different axis: one ±Fx pair, one ±Fy pair, one torque pair (two off-centre thrusters producing opposing torques). Straightforward, orthogonal control axes, easy to reason about.
+
+### Summary table
+
+| Arrangement | Thrusters | Holonomic? | Notes |
+|---|---|---|---|
+| Opposed pairs through CoM | 4 | No | Zero torque capability |
+| Longitudinal + differential (old wildboids) | 4 | No | Lateral force coupled to torque |
+| Pinwheel (alternating tangential) | 4 | Yes | Minimum viable; no preferred axis |
+| X-configuration (canted corners) | 4 | Yes | Minimum viable; compact |
+| Longitudinal + differential + strafe (current wildboids) | 6 | **Yes** | Redundant; clear role per thruster |
+| Perimeter ring (60° intervals) | 6 | Yes | Maximally symmetric; no preferred direction |
+| Three opposed pairs | 6 | Yes | Orthogonal control axes; easy to analyse |
 
 ## Design Implications for Wildboids
 
