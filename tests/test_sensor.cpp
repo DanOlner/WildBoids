@@ -748,6 +748,142 @@ TEST_CASE("Compound eye: speed sensor appended at end", "[sensor][compound]") {
     CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
 }
 
+// ---- Angular velocity (proprioceptive) sensor tests ----
+
+TEST_CASE("Angular velocity sensor: stationary boid returns 0", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::AngularVelocity, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    auto boids = make_boids(make_boid({400, 400}));
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_angular_speed = 10.0f;
+    World world(config);
+    world.add_boid(std::move(boids[0]));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+    CHECK_THAT(output, WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Angular velocity sensor: spinning CCW returns positive", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::AngularVelocity, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.angular_velocity = 5.0f; // half of max
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_angular_speed = 10.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+    CHECK_THAT(output, WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Angular velocity sensor: spinning CW returns negative", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::AngularVelocity, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.angular_velocity = -5.0f;
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_angular_speed = 10.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+    CHECK_THAT(output, WithinAbs(-0.5f, 0.02f));
+}
+
+TEST_CASE("Angular velocity sensor: clamps to [-1, 1]", "[sensor][proprioception]") {
+    SensorSpec spec{0, 0, 0, 0, EntityFilter::AngularVelocity, SignalType::NearestDistance};
+    SensorySystem sys({spec});
+
+    Boid b = make_boid({400, 400});
+    b.body.angular_velocity = 15.0f; // above max
+
+    WorldConfig config;
+    config.width = 800;
+    config.height = 800;
+    config.toroidal = true;
+    config.grid_cell_size = 100;
+    config.max_angular_speed = 10.0f;
+    World world(config);
+    world.add_boid(std::move(b));
+    world.step(0);
+
+    float output = 0;
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), &output);
+    CHECK_THAT(output, WithinAbs(1.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: angular velocity sensor appended after speed", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    CHECK(sys.input_count() == 3); // 1 eye × 1 channel + speed + angular_vel
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 25.0f};
+    b.body.angular_velocity = 5.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    wc.max_angular_speed = 10.0f;
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[3] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    // Eye output: no food
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // Speed: 25/50 = 0.5
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
+    // Angular velocity: 5/10 = 0.5
+    CHECK_THAT(outputs[2], WithinAbs(0.5f, 0.02f));
+}
+
+TEST_CASE("Compound eye: total_inputs counts angular velocity sensor", "[sensor][compound]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = false;
+    for (int i = 0; i < 4; ++i) {
+        cfg.eyes.push_back(EyeSpec{i, 0, 90 * DEG, 100});
+    }
+    // 4 eyes × 3 channels + 1 speed = 13
+    CHECK(cfg.total_inputs() == 13);
+
+    cfg.has_angular_velocity_sensor = true;
+    // 4 eyes × 3 channels + 1 speed + 1 angular_vel = 14
+    CHECK(cfg.total_inputs() == 14);
+}
+
 TEST_CASE("Compound eye: toroidal detection across world edge", "[sensor][compound]") {
     CompoundEyeConfig cfg;
     cfg.channels = {SensorChannel::Same};

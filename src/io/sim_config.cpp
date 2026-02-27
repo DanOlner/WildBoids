@@ -24,6 +24,7 @@ SimConfig load_sim_config(const std::string& path) {
         cfg.world.angular_drag = w.value("angularDrag", cfg.world.angular_drag);
         cfg.world.grid_cell_size = w.value("gridCellSize", cfg.world.grid_cell_size);
         cfg.world.max_speed = w.value("maxSpeed", cfg.world.max_speed);
+        cfg.world.max_angular_speed = w.value("maxAngularSpeed", cfg.world.max_angular_speed);
     }
 
     // Food

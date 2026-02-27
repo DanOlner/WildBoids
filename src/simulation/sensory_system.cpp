@@ -40,6 +40,7 @@ static bool passes_filter(EntityFilter filter, const std::string& type) {
         case EntityFilter::Predator: return type == "predator";
         case EntityFilter::Food:     return false; // food filter doesn't match boids
         case EntityFilter::Speed:    return false; // proprioceptive, not spatial
+        case EntityFilter::AngularVelocity: return false; // proprioceptive, not spatial
     }
     return false;
 }
@@ -91,6 +92,11 @@ float SensorySystem::evaluate_sensor(const SensorSpec& spec,
         float max_speed = config.max_speed;
         if (max_speed <= 0.0f) return 0.0f;
         return std::min(1.0f, speed / max_speed);
+    }
+    if (spec.filter == EntityFilter::AngularVelocity) {
+        float max_av = config.max_angular_speed;
+        if (max_av <= 0.0f) return 0.0f;
+        return std::max(-1.0f, std::min(1.0f, self.body.angular_velocity / max_av));
     }
 
     float range_sq = spec.max_range * spec.max_range;
@@ -234,11 +240,18 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
         }
     }
 
-    // --- Speed sensor (appended at end) ---
+    // --- Proprioceptive sensors (appended at end) ---
+    int proprio_idx = n_eyes * n_channels;
     if (cfg.has_speed_sensor) {
-        int speed_idx = n_eyes * n_channels;
         float speed = self.body.velocity.length();
         float max_speed = config.max_speed;
-        outputs[speed_idx] = (max_speed > 0) ? std::min(1.0f, speed / max_speed) : 0.0f;
+        outputs[proprio_idx] = (max_speed > 0) ? std::min(1.0f, speed / max_speed) : 0.0f;
+        proprio_idx++;
+    }
+    if (cfg.has_angular_velocity_sensor) {
+        float max_av = config.max_angular_speed;
+        outputs[proprio_idx] = (max_av > 0)
+            ? std::max(-1.0f, std::min(1.0f, self.body.angular_velocity / max_av))
+            : 0.0f;
     }
 }

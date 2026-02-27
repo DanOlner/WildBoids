@@ -80,6 +80,7 @@
             { "id": 15, "centerAngleDeg": 180,     "arcWidthDeg": 27, "maxRange": 100 }
         ],
         "channels": ["food", "same", "opposite"],
-        "speedSensor": true
+        "speedSensor": true,
+        "angularVelocitySensor": true
     }
 }

@@ -32,6 +32,7 @@ struct WorldConfig {
 
     // Proprioceptive sensor normalization
     float max_speed = 50.0f;           // speed sensor normalization constant (speed / max_speed, clamped to [0,1])
+    float max_angular_speed = 10.0f;   // angular velocity sensor normalization (angular_vel / max, clamped to [-1,1])
 
     // Energy costs
     float metabolism_rate = 0.5f;      // energy lost per second just being alive
