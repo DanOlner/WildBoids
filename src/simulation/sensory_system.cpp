@@ -268,5 +268,13 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
         } else {
             outputs[proprio_idx] = 0.0f;
         }
+        proprio_idx++;
+    }
+    if (cfg.has_shoaling_sensor) {
+        float base_drag = config.linear_drag;
+        float bonus = (base_drag > 0.0f && self.effective_linear_drag >= 0.0f)
+                      ? (1.0f - self.effective_linear_drag / base_drag)
+                      : 0.0f;
+        outputs[proprio_idx] = std::clamp(bonus, 0.0f, 1.0f);
     }
 }

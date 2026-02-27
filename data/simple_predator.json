@@ -62,26 +62,111 @@
     ],
     "compoundEyes": {
         "eyes": [
-            { "id": 0,  "centerAngleDeg": 0,      "arcWidthDeg": 18, "maxRange": 100 },
-            { "id": 1,  "centerAngleDeg": -18,     "arcWidthDeg": 18, "maxRange": 100 },
-            { "id": 2,  "centerAngleDeg": 18,      "arcWidthDeg": 18, "maxRange": 100 },
-            { "id": 3,  "centerAngleDeg": -36,     "arcWidthDeg": 18, "maxRange": 100 },
-            { "id": 4,  "centerAngleDeg": 36,      "arcWidthDeg": 18, "maxRange": 100 },
-            { "id": 5,  "centerAngleDeg": -58.5,   "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 6,  "centerAngleDeg": 58.5,    "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 7,  "centerAngleDeg": -81,     "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 8,  "centerAngleDeg": 81,      "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 9,  "centerAngleDeg": -112.5,  "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 10, "centerAngleDeg": 112.5,   "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 11, "centerAngleDeg": -139.5,  "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 12, "centerAngleDeg": 139.5,   "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 13, "centerAngleDeg": -166.5,  "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 14, "centerAngleDeg": 166.5,   "arcWidthDeg": 27, "maxRange": 100 },
-            { "id": 15, "centerAngleDeg": 180,     "arcWidthDeg": 27, "maxRange": 100 }
+            {
+                "id": 0,
+                "centerAngleDeg": 0,
+                "arcWidthDeg": 18,
+                "maxRange": 100
+            },
+            {
+                "id": 1,
+                "centerAngleDeg": -18,
+                "arcWidthDeg": 18,
+                "maxRange": 100
+            },
+            {
+                "id": 2,
+                "centerAngleDeg": 18,
+                "arcWidthDeg": 18,
+                "maxRange": 100
+            },
+            {
+                "id": 3,
+                "centerAngleDeg": -36,
+                "arcWidthDeg": 18,
+                "maxRange": 100
+            },
+            {
+                "id": 4,
+                "centerAngleDeg": 36,
+                "arcWidthDeg": 18,
+                "maxRange": 100
+            },
+            {
+                "id": 5,
+                "centerAngleDeg": -58.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 6,
+                "centerAngleDeg": 58.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 7,
+                "centerAngleDeg": -81,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 8,
+                "centerAngleDeg": 81,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 9,
+                "centerAngleDeg": -112.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 10,
+                "centerAngleDeg": 112.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 11,
+                "centerAngleDeg": -139.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 12,
+                "centerAngleDeg": 139.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 13,
+                "centerAngleDeg": -166.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 14,
+                "centerAngleDeg": 166.5,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            },
+            {
+                "id": 15,
+                "centerAngleDeg": 180,
+                "arcWidthDeg": 27,
+                "maxRange": 100
+            }
         ],
-        "channels": ["food", "same", "opposite"],
+        "channels": [
+            "food",
+            "same",
+            "opposite"
+        ],
         "speedSensor": true,
         "angularVelocitySensor": true,
-        "noiseSensor": true
+        "noiseSensor": true,
+        "shoalingSensor": false
     }
 }

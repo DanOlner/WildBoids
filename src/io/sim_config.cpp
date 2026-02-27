@@ -83,6 +83,20 @@ SimConfig load_sim_config(const std::string& path) {
         }
     }
 
+    // Shoaling
+    if (j.contains("shoaling")) {
+        const auto& sh = j["shoaling"];
+        auto load_shoaling = [](const json& obj, WorldConfig::ShoalingConfig& sc) {
+            sc.radius = obj.value("radius", sc.radius);
+            sc.max_reduction = obj.value("maxReduction", sc.max_reduction);
+            sc.max_neighbours = obj.value("maxNeighbours", sc.max_neighbours);
+            if (obj.contains("arcDeg"))
+                sc.arc = obj["arcDeg"].get<float>() * (3.14159265f / 180.0f);
+        };
+        if (sh.contains("prey")) load_shoaling(sh["prey"], cfg.world.prey_shoaling);
+        if (sh.contains("predator")) load_shoaling(sh["predator"], cfg.world.predator_shoaling);
+    }
+
     // Energy
     if (j.contains("energy")) {
         const auto& e = j["energy"];

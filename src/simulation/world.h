@@ -47,6 +47,16 @@ struct WorldConfig {
     float mouth_arc_width = 3.14159265f;  // radians (default π = 180°, front hemisphere)
     bool mouth_require_approach = true;   // velocity dot-product check
 
+    // Shoaling: drag reduction from same-type neighbours
+    struct ShoalingConfig {
+        float radius = 0.0f;            // 0 = disabled
+        float max_reduction = 0.0f;     // max drag reduction fraction (0.3 = 30%)
+        int   max_neighbours = 6;       // count that gives max reduction
+        float arc = 4.71238898f;        // forward arc in radians (default 270° = 3π/2), only neighbours within this arc count
+    };
+    ShoalingConfig prey_shoaling;
+    ShoalingConfig predator_shoaling;
+
     // Sensor channel enable/disable (compound eyes only)
     // Disabled channels produce 0.0 — NEAT inputs still exist but carry no information
     std::vector<SensorChannel> enabled_channels = {
@@ -86,4 +96,5 @@ private:
     void check_food_eating();
     void check_predation();
     void deduct_energy(float dt);
+    void compute_shoaling();
 };

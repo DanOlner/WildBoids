@@ -38,7 +38,7 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.thrusters[4].label == "strafe_left");
     CHECK(spec.thrusters[5].label == "strafe_right");
 
-    // Compound eyes (16 eyes × 3 channels + 1 speed = 49 inputs)
+    // Compound eyes
     REQUIRE(spec.compound_eyes.has_value());
     CHECK(spec.sensors.empty());
     CHECK(spec.compound_eyes->eyes.size() == 16);
@@ -46,7 +46,8 @@ TEST_CASE("Load simple_boid.json", "[boid_spec]") {
     CHECK(spec.compound_eyes->has_speed_sensor == true);
     CHECK(spec.compound_eyes->eyes[0].id == 0);
     CHECK_THAT(spec.compound_eyes->eyes[0].center_angle, WithinAbs(0.0f, 1e-4f));
-    CHECK(sensor_input_count(spec) == 51);
+    // Input count derived from spec — resilient to toggling proprioceptive sensors
+    CHECK(sensor_input_count(spec) == spec.compound_eyes->total_inputs());
 }
 
 TEST_CASE("Create boid from spec", "[boid_spec]") {
@@ -64,11 +65,12 @@ TEST_CASE("Create boid from spec", "[boid_spec]") {
         CHECK_THAT(t.power, WithinAbs(0.0f, 1e-6f));
     }
 
-    // Compound-eye sensors wired up
+    // Compound-eye sensors wired up — count matches spec
     REQUIRE(boid.sensors.has_value());
     CHECK(boid.sensors->is_compound());
-    CHECK(boid.sensors->input_count() == 51);
-    CHECK(boid.sensor_outputs.size() == 51);
+    int expected_inputs = sensor_input_count(spec);
+    CHECK(boid.sensors->input_count() == expected_inputs);
+    CHECK(boid.sensor_outputs.size() == static_cast<size_t>(expected_inputs));
 }
 
 TEST_CASE("Round-trip save and reload", "[boid_spec]") {

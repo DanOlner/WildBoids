@@ -33,12 +33,14 @@ struct CompoundEyeConfig {
     bool has_speed_sensor = true;
     bool has_angular_velocity_sensor = false;
     bool has_noise_sensor = false;
+    bool has_shoaling_sensor = false;
 
     int total_inputs() const {
         return static_cast<int>(eyes.size()) * static_cast<int>(channels.size())
                + (has_speed_sensor ? 1 : 0)
                + (has_angular_velocity_sensor ? 1 : 0)
-               + (has_noise_sensor ? 1 : 0);
+               + (has_noise_sensor ? 1 : 0)
+               + (has_shoaling_sensor ? 1 : 0);
     }
 };
 

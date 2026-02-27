@@ -29,13 +29,17 @@ void World::add_food(Food food) {
 
 void World::step(float dt, std::mt19937* rng) {
     for (auto& boid : boids_) {
-        boid.step(dt, config_.linear_drag, config_.angular_drag);
+        float drag = (boid.effective_linear_drag >= 0.0f)
+                     ? boid.effective_linear_drag
+                     : config_.linear_drag;
+        boid.step(dt, drag, config_.angular_drag);
         if (config_.toroidal) {
             wrap_position(boid.body.position);
         }
     }
 
     rebuild_grid();
+    compute_shoaling();
     run_sensors(rng);
     run_brains();
     deduct_energy(dt);
@@ -114,6 +118,69 @@ void World::rebuild_grid() {
         if (boids_[i].alive) {
             grid_.insert(i, boids_[i].body.position);
         }
+    }
+}
+
+void World::compute_shoaling() {
+    // Early exit if both types disabled (radius 0)
+    if (config_.prey_shoaling.radius <= 0.0f &&
+        config_.predator_shoaling.radius <= 0.0f) {
+        // Reset all to world default
+        for (auto& boid : boids_) {
+            boid.effective_linear_drag = config_.linear_drag;
+        }
+        return;
+    }
+
+    std::vector<int> candidates;
+    for (int i = 0; i < static_cast<int>(boids_.size()); ++i) {
+        auto& boid = boids_[i];
+        if (!boid.alive) {
+            boid.effective_linear_drag = config_.linear_drag;
+            continue;
+        }
+
+        const auto& shoal_cfg = (boid.type == "predator")
+                                ? config_.predator_shoaling
+                                : config_.prey_shoaling;
+
+        if (shoal_cfg.radius <= 0.0f) {
+            boid.effective_linear_drag = config_.linear_drag;
+            continue;
+        }
+
+        // Query grid for nearby boids
+        candidates.clear();
+        grid_.query(boid.body.position, shoal_cfg.radius, candidates);
+
+        float radius_sq = shoal_cfg.radius * shoal_cfg.radius;
+        int count = 0;
+        for (int j : candidates) {
+            if (j == i) continue;
+            if (!boids_[j].alive) continue;
+            if (boids_[j].type != boid.type) continue;
+
+            Vec2 delta;
+            if (config_.toroidal) {
+                delta = toroidal_delta(boid.body.position, boids_[j].body.position,
+                                       config_.width, config_.height);
+            } else {
+                delta = boids_[j].body.position - boid.body.position;
+            }
+            if (delta.length_squared() > radius_sq) continue;
+
+            // Arc check: only count neighbours within the forward arc
+            if (shoal_cfg.arc < 6.28f) {  // skip if full circle (2π)
+                Vec2 body_delta = delta.rotated(-boid.body.angle);
+                float angle = std::atan2(body_delta.x, body_delta.y);
+                if (!angle_in_arc(angle, 0.0f, shoal_cfg.arc)) continue;
+            }
+            ++count;
+        }
+
+        float fraction = static_cast<float>(std::min(count, shoal_cfg.max_neighbours))
+                       / static_cast<float>(shoal_cfg.max_neighbours);
+        boid.effective_linear_drag = config_.linear_drag * (1.0f - shoal_cfg.max_reduction * fraction);
     }
 }
 
