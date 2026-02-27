@@ -43,8 +43,8 @@
     },
     "neat": {
         "recurrent": true,
-        "addNodeProb": 0.1,
-        "addConnectionProb": 0.1,
+        "addNodeProb": 0.3,
+        "addConnectionProb": 0.3,
         "weightMutateProb": 0.8,
         "weightSigma": 0.5,
         "weightReplaceProb": 0.1,

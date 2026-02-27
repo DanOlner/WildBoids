@@ -278,3 +278,11 @@
 2900	3326	1772200729563769338	wildboids_tests	27df1b729a4ebab
 2900	3326	1772200729563769338	wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
 2900	3326	1772200729563769338	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
+14	521	1772202707469993150	CMakeFiles/wildboids_sim.dir/src/brain/mutation.cpp.o	a0a9cf5fda7a053d
+521	562	1772202707976507705	libwildboids_sim.a	f9b780557907a154
+562	599	1772202708017575465	wildboids_headless	3c02d6d5a49b6eff
+562	599	1772202708017742632	wildboids	fd836415e67c0f72
+15	817	1772202707470566484	CMakeFiles/wildboids_tests.dir/tests/test_mutation.cpp.o	3961db90e83d527c
+817	1240	1772202708694062651	wildboids_tests	27df1b729a4ebab
+817	1240	1772202708694062651	wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab
+817	1240	1772202708694062651	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	27df1b729a4ebab

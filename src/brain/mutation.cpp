@@ -123,6 +123,7 @@ bool mutate_add_node(NeatGenome& genome, std::mt19937& rng,
     int src_id = genome.connections[ci].source;
     int tgt_id = genome.connections[ci].target;
     float orig_weight = genome.connections[ci].weight;
+    bool orig_recurrent = genome.connections[ci].recurrent;
 
     // Disable the original connection
     genome.connections[ci].enabled = false;
@@ -138,11 +139,24 @@ bool mutate_add_node(NeatGenome& genome, std::mt19937& rng,
 
     // source → new_node with weight 1.0 (preserves signal magnitude)
     int innov1 = tracker.get_or_create(src_id, new_id);
-    genome.connections.push_back({innov1, src_id, new_id, 1.0f, true});
+    genome.connections.push_back({innov1, src_id, new_id, 1.0f, true, false});
 
     // new_node → target with original weight (preserves existing behaviour)
     int innov2 = tracker.get_or_create(new_id, tgt_id);
-    genome.connections.push_back({innov2, new_id, tgt_id, orig_weight, true});
+    genome.connections.push_back({innov2, new_id, tgt_id, orig_weight, true, false});
+
+    // If the original connection was recurrent, check whether either new
+    // connection creates a cycle in the feed-forward subgraph and mark it
+    // recurrent accordingly. Must mark sequentially: once the first is
+    // marked recurrent, it's excluded from the DFS for the second check.
+    if (orig_recurrent) {
+        if (creates_cycle(genome, src_id, new_id)) {
+            genome.connections[genome.connections.size() - 2].recurrent = true;
+        }
+        if (creates_cycle(genome, new_id, tgt_id)) {
+            genome.connections[genome.connections.size() - 1].recurrent = true;
+        }
+    }
 
     return true;
 }

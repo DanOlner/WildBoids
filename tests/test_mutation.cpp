@@ -401,6 +401,82 @@ TEST_CASE("mutate_add_connection: allow_recurrent=true produces some recurrent c
     CHECK(recurrent_count > 0);
 }
 
+TEST_CASE("mutate_add_node: splitting recurrent connection propagates recurrent flag", "[mutation]") {
+    // Build a genome: input(0) → hidden(3) → output(2), plus output(2) → hidden(3) (recurrent)
+    NeatGenome genome;
+    genome.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    genome.nodes.push_back({2, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    genome.nodes.push_back({3, NodeType::Hidden, ActivationFn::Sigmoid, 0.0f});
+
+    // Feed-forward path: input → hidden → output
+    genome.connections.push_back({1, 0, 3, 1.0f, true, false});  // input→hidden (ff)
+    genome.connections.push_back({2, 3, 2, 1.0f, true, false});  // hidden→output (ff)
+    // Recurrent: output → hidden
+    genome.connections.push_back({3, 2, 3, 0.5f, true, true});   // output→hidden (recurrent)
+
+    InnovationTracker tracker(100);
+
+    // Force split the recurrent connection (index 2: output→hidden)
+    // We'll do it manually to target the specific connection
+    // Save values
+    int src_id = genome.connections[2].source;  // output(2)
+    int tgt_id = genome.connections[2].target;  // hidden(3)
+    REQUIRE(genome.connections[2].recurrent);
+
+    // Disable original
+    genome.connections[2].enabled = false;
+
+    // Split: output(2) → new(4) → hidden(3)
+    genome.nodes.push_back({4, NodeType::Hidden, ActivationFn::Sigmoid, 0.0f});
+    // Use mutate_add_node indirectly by setting up the same scenario
+    // Actually, let's just call mutate_add_node with a rigged RNG that picks connection index 2
+    // Simpler: reconstruct and use the function directly
+
+    // Reset and test via the actual function
+    genome = NeatGenome{};
+    genome.nodes.push_back({0, NodeType::Input, ActivationFn::Linear, 0.0f});
+    genome.nodes.push_back({2, NodeType::Output, ActivationFn::Sigmoid, 0.0f});
+    genome.nodes.push_back({3, NodeType::Hidden, ActivationFn::Sigmoid, 0.0f});
+    genome.connections.push_back({1, 0, 3, 1.0f, true, false});
+    genome.connections.push_back({2, 3, 2, 1.0f, true, false});
+    genome.connections.push_back({3, 2, 3, 0.5f, true, true});
+
+    // Only the recurrent connection should be split if the RNG picks it.
+    // Try many times — at least once we should split connection index 2.
+    bool tested_recurrent_split = false;
+    for (int seed = 0; seed < 100 && !tested_recurrent_split; ++seed) {
+        NeatGenome g = genome;
+        InnovationTracker t(100);
+        std::mt19937 rng(seed);
+        mutate_add_node(g, rng, t);
+
+        // Check if connection index 2 (the recurrent one) was disabled
+        if (!g.connections[2].enabled) {
+            tested_recurrent_split = true;
+
+            // The two new connections are the last two
+            auto& c1 = g.connections[g.connections.size() - 2]; // output(2) → new
+            auto& c2 = g.connections[g.connections.size() - 1]; // new → hidden(3)
+
+            // output(2) → new: output is downstream, so this must be recurrent
+            CHECK(c1.source == 2);
+            CHECK(c1.recurrent == true);
+
+            // new → hidden(3): new hidden feeds into existing hidden, feed-forward
+            CHECK(c2.target == 3);
+            CHECK(c2.recurrent == false);
+
+            // Network should still build and activate without crashing
+            NeatNetwork net(g);
+            float in = 1.0f;
+            float out = 0.0f;
+            net.activate(&in, 1, &out, 1);
+            CHECK(std::isfinite(out));
+        }
+    }
+    CHECK(tested_recurrent_split);
+}
+
 TEST_CASE("Recurrent genome round-trip through save/load", "[mutation]") {
     // Build a genome with some recurrent connections
     NeatGenome genome = make_minimal(3, 2);
