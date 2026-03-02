@@ -15,6 +15,7 @@ int main(int argc, char* argv[]) {
   std::string config_path = "data/sim_config.json";
   int num_boids = 30;
   int num_predators = 0;
+  int window_size = 0;  // 0 = use world size
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--champion") == 0 && i + 1 < argc) {
       prey_champion_path = argv[++i];
@@ -28,6 +29,8 @@ int main(int argc, char* argv[]) {
       num_predators = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
       config_path = argv[++i];
+    } else if (std::strcmp(argv[i], "--window-size") == 0 && i + 1 < argc) {
+      window_size = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--help") == 0) {
       std::cerr << "Usage: " << argv[0] << " [options]\n"
                 << "  --champion PATH          Load evolved prey champion JSON\n"
@@ -36,6 +39,7 @@ int main(int argc, char* argv[]) {
                 << "  --boids N                Number of prey boids (default: 30)\n"
                 << "  --predators N            Number of predator boids (default: 0)\n"
                 << "  --config PATH            Sim config JSON (default: data/sim_config.json)\n"
+                << "  --window-size N          Window size in pixels (default: world size)\n"
                 << "  --help                   Show this help\n";
       return 0;
     }
@@ -163,8 +167,8 @@ int main(int argc, char* argv[]) {
 
   // Create window and run
   try {
-    int window_w = static_cast<int>(sim.world.width);
-    int window_h = static_cast<int>(sim.world.height);
+    int window_w = window_size > 0 ? window_size : static_cast<int>(sim.world.width);
+    int window_h = window_size > 0 ? window_size : static_cast<int>(sim.world.height);
     Renderer renderer(window_w, window_h, "Wild Boids");
     App app(world, renderer, rng);
     app.run();

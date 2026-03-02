@@ -202,3 +202,7 @@
 3367	3802	1772215083976968838	wildboids_tests	c465915f9f2564bb
 3367	3802	1772215083976968838	wildboids_tests-b12d07c_tests.cmake	c465915f9f2564bb
 3367	3802	1772215083976968838	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	c465915f9f2564bb
+11	623	1772456610475901615	CMakeFiles/wildboids.dir/src/main.cpp.o	f8f3191f8e25edef
+623	658	1772456611088197385	wildboids	fd836415e67c0f72
+9	365	1772456847839817235	CMakeFiles/wildboids.dir/src/display/app.cpp.o	bd6e2a5c1304fa48
+365	397	1772456848195588989	wildboids	fd836415e67c0f72

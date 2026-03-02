@@ -68,6 +68,7 @@ void App::handle_events() {
                             if (speed_multiplier_ == 1) speed_multiplier_ = 2;
                             else if (speed_multiplier_ == 2) speed_multiplier_ = 4;
                             else if (speed_multiplier_ == 4) speed_multiplier_ = 8;
+                            else if (speed_multiplier_ == 8) speed_multiplier_ = 16;
                             else speed_multiplier_ = 1;
                             std::cerr << "Speed: " << speed_multiplier_ << "x\n";
                             break;
