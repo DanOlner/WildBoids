@@ -64,6 +64,54 @@ void App::handle_events() {
                         case SDL_SCANCODE_S:
                             renderer_.set_show_sensors(!renderer_.show_sensors());
                             break;
+                        case SDL_SCANCODE_P: {
+                            // Debug: dump first predator's sensor outputs
+                            const auto& boids = world_.get_boids();
+                            for (const auto& b : boids) {
+                                if (b.type != "predator" || !b.alive || !b.sensors) continue;
+                                const auto& cfg = b.sensors->compound_config();
+                                int n_ch = static_cast<int>(cfg.channels.size());
+                                int n_short = cfg.short_range_eye_count();
+                                int n_long = cfg.long_range_eye_count();
+                                std::cerr << "=== Predator sensor dump ===\n";
+                                std::cerr << "sensor_outputs.size()=" << b.sensor_outputs.size()
+                                          << " expected=" << cfg.total_inputs() << "\n";
+                                std::cerr << "n_short=" << n_short << " n_long=" << n_long
+                                          << " n_channels=" << n_ch << "\n";
+                                std::cerr << "Short-range eyes:\n";
+                                for (int e = 0; e < n_short; ++e) {
+                                    float max_sig = 0;
+                                    for (int c = 0; c < n_ch; ++c) {
+                                        int idx = e * n_ch + c;
+                                        float v = b.sensor_outputs[idx];
+                                        if (v > 0.01f)
+                                            std::cerr << "  eye[" << e << "] ch=" << c
+                                                      << " angle=" << (cfg.eyes[e].center_angle * 180/3.14159f)
+                                                      << "deg val=" << v << "\n";
+                                        max_sig = std::max(max_sig, v);
+                                    }
+                                }
+                                int long_off = n_short * n_ch;
+                                std::cerr << "Long-range eyes (offset=" << long_off << "):\n";
+                                for (int e = 0; e < n_long; ++e) {
+                                    for (int c = 0; c < n_ch; ++c) {
+                                        int idx = long_off + e * n_ch + c;
+                                        float v = b.sensor_outputs[idx];
+                                        if (v > 0.01f)
+                                            std::cerr << "  long_eye[" << e << "] ch=" << c
+                                                      << " angle=" << (cfg.long_range_eyes[e].center_angle * 180/3.14159f)
+                                                      << "deg val=" << v << "\n";
+                                    }
+                                }
+                                int pi = (n_short + n_long) * n_ch;
+                                std::cerr << "Proprioceptive (from idx " << pi << "):";
+                                for (int i = pi; i < static_cast<int>(b.sensor_outputs.size()); ++i)
+                                    std::cerr << " " << b.sensor_outputs[i];
+                                std::cerr << "\n";
+                                break; // just first predator
+                            }
+                            break;
+                        }
                         case SDL_SCANCODE_F:
                             if (speed_multiplier_ == 1) speed_multiplier_ = 2;
                             else if (speed_multiplier_ == 2) speed_multiplier_ = 4;
