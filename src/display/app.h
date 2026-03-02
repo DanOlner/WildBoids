@@ -16,6 +16,7 @@ private:
     bool running_ = true;
     bool paused_ = false;
     int speed_multiplier_ = 1;
+    int selected_boid_index_ = -1;  // -1 = none selected
 
     void handle_events();
     void apply_random_wander();

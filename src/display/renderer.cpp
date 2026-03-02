@@ -50,7 +50,15 @@ float Renderer::world_to_screen_y(float wy, const WorldConfig& config) const {
     return static_cast<float>(window_height_) - wy * scale_y(config);
 }
 
-void Renderer::draw(const World& world) {
+float Renderer::screen_to_world_x(float sx, const WorldConfig& config) const {
+    return sx / scale_x(config);
+}
+
+float Renderer::screen_to_world_y(float sy, const WorldConfig& config) const {
+    return (static_cast<float>(window_height_) - sy) / scale_y(config);
+}
+
+void Renderer::draw(const World& world, int selected_boid) {
     // Black background
     SDL_SetRenderDrawColor(renderer_, 10, 10, 15, 255);
     SDL_RenderClear(renderer_);
@@ -59,7 +67,9 @@ void Renderer::draw(const World& world) {
 
     draw_food(world.get_food(), config);
 
-    for (const auto& boid : world.get_boids()) {
+    const auto& boids = world.get_boids();
+    for (int i = 0; i < static_cast<int>(boids.size()); ++i) {
+        const auto& boid = boids[i];
         if (!boid.alive) continue;
         if (show_sensors_) {
             draw_sensor_arcs(boid, config);
@@ -67,6 +77,9 @@ void Renderer::draw(const World& world) {
         draw_boid(boid, config);
         if (show_thrusters_) {
             draw_thruster_indicators(boid, config);
+        }
+        if (i == selected_boid) {
+            draw_selection_ring(boid, config);
         }
     }
 
@@ -296,5 +309,21 @@ void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
                            ? boid.sensor_outputs[si] : 0.0f;
             draw_one_arc(boid, config, spec.center_angle, spec.arc_width, spec.max_range, signal);
         }
+    }
+}
+
+void Renderer::draw_selection_ring(const Boid& boid, const WorldConfig& config) {
+    constexpr float RING_RADIUS = 20.0f;
+    constexpr int SEGMENTS = 24;
+    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+
+    for (int i = 0; i < SEGMENTS; ++i) {
+        float a0 = 2.0f * 3.14159265f * i / SEGMENTS;
+        float a1 = 2.0f * 3.14159265f * (i + 1) / SEGMENTS;
+        float x0 = world_to_screen_x(boid.body.position.x + RING_RADIUS * std::cos(a0), config);
+        float y0 = world_to_screen_y(boid.body.position.y + RING_RADIUS * std::sin(a0), config);
+        float x1 = world_to_screen_x(boid.body.position.x + RING_RADIUS * std::cos(a1), config);
+        float y1 = world_to_screen_y(boid.body.position.y + RING_RADIUS * std::sin(a1), config);
+        SDL_RenderLine(renderer_, x0, y0, x1, y1);
     }
 }

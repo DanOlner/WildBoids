@@ -11,9 +11,12 @@ public:
   Renderer(const Renderer &) = delete;
   Renderer &operator=(const Renderer &) = delete;
 
-  void draw(const World &world);
+  void draw(const World &world, int selected_boid = -1);
   void present();
   bool should_close() const;
+
+  float screen_to_world_x(float sx, const WorldConfig &config) const;
+  float screen_to_world_y(float sy, const WorldConfig &config) const;
 
   void set_show_thrusters(bool show) { show_thrusters_ = show; }
   bool show_thrusters() const { return show_thrusters_; }
@@ -58,4 +61,5 @@ private:
                     float center_angle, float arc_width, float max_range, float signal,
                     int channel_tint = 3, bool long_range = false);
   void draw_food(const std::vector<Food> &food, const WorldConfig &config);
+  void draw_selection_ring(const Boid &boid, const WorldConfig &config);
 };

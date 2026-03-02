@@ -81,6 +81,9 @@ public:
     const SpatialGrid& grid() const;
     const std::vector<Food>& get_food() const;
 
+    // Rebuild grid and re-run sensors for one boid (used for paused-mode editing)
+    void refresh_sensors(int boid_index, std::mt19937* rng = nullptr);
+
 private:
     WorldConfig config_;
     std::vector<Boid> boids_;

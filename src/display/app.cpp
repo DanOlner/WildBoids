@@ -37,7 +37,7 @@ void App::run() {
             accumulator = 0.0; // don't build up time while paused
         }
 
-        renderer_.draw(world_);
+        renderer_.draw(world_, paused_ ? selected_boid_index_ : -1);
         renderer_.present();
     }
 }
@@ -180,8 +180,67 @@ void App::handle_events() {
                             else speed_multiplier_ = 1;
                             std::cerr << "Speed: " << speed_multiplier_ << "x\n";
                             break;
+                        case SDL_SCANCODE_K:
+                        case SDL_SCANCODE_L:
+                            if (paused_) {
+                                const auto& boids = world_.get_boids();
+                                int n = static_cast<int>(boids.size());
+                                if (n == 0) break;
+                                int dir = (event.key.scancode == SDL_SCANCODE_L) ? 1 : -1;
+                                int start = selected_boid_index_;
+                                if (start < 0) start = (dir == 1) ? -1 : n;
+                                for (int i = 0; i < n; ++i) {
+                                    start = (start + dir + n) % n;
+                                    if (boids[start].alive) {
+                                        selected_boid_index_ = start;
+                                        std::cerr << "Selected boid " << start
+                                                  << " (" << boids[start].type << ")\n";
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
                         default:
                             break;
+                    }
+                }
+
+                // Paused-mode controls (allow key repeat for smooth nudging)
+                if (paused_ && selected_boid_index_ >= 0) {
+                    auto& boids = world_.get_boids_mut();
+                    if (selected_boid_index_ < static_cast<int>(boids.size()) &&
+                        boids[selected_boid_index_].alive) {
+                        auto& body = boids[selected_boid_index_].body;
+                        constexpr float NUDGE = 1.0f;
+                        constexpr float ROTATE_STEP = 3.14159265f / 180.0f; // 1 degree
+                        bool moved = false;
+                        switch (event.key.scancode) {
+                            case SDL_SCANCODE_UP:    body.position.y -= NUDGE; moved = true; break;
+                            case SDL_SCANCODE_DOWN:  body.position.y += NUDGE; moved = true; break;
+                            case SDL_SCANCODE_LEFT:  body.position.x -= NUDGE; moved = true; break;
+                            case SDL_SCANCODE_RIGHT: body.position.x += NUDGE; moved = true; break;
+                            case SDL_SCANCODE_COMMA:  body.angle += ROTATE_STEP; moved = true; break;
+                            case SDL_SCANCODE_PERIOD: body.angle -= ROTATE_STEP; moved = true; break;
+                            default: break;
+                        }
+                        if (moved) {
+                            world_.refresh_sensors(selected_boid_index_, &rng_);
+                        }
+                    }
+                }
+                break;
+
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (paused_ && selected_boid_index_ >= 0 &&
+                    event.button.button == SDL_BUTTON_LEFT) {
+                    auto& boids = world_.get_boids_mut();
+                    if (selected_boid_index_ < static_cast<int>(boids.size()) &&
+                        boids[selected_boid_index_].alive) {
+                        const auto& config = world_.get_config();
+                        float wx = renderer_.screen_to_world_x(event.button.x, config);
+                        float wy = renderer_.screen_to_world_y(event.button.y, config);
+                        boids[selected_boid_index_].body.position = {wx, wy};
+                        world_.refresh_sensors(selected_boid_index_, &rng_);
                     }
                 }
                 break;

@@ -68,6 +68,18 @@ void World::run_sensors(std::mt19937* rng) {
     }
 }
 
+void World::refresh_sensors(int boid_index, std::mt19937* rng) {
+    rebuild_grid();
+    if (boid_index >= 0 && boid_index < static_cast<int>(boids_.size())) {
+        auto& boid = boids_[boid_index];
+        if (boid.alive && boid.sensors) {
+            boid.sensor_outputs.resize(boid.sensors->input_count());
+            boid.sensors->perceive(boids_, grid_, config_, boid_index, food_,
+                                   boid.sensor_outputs.data(), rng);
+        }
+    }
+}
+
 const std::vector<Boid>& World::get_boids() const {
     return boids_;
 }
