@@ -642,3 +642,69 @@ Several key takeaways for Wild Boids:
 - [The Mathematics of Kindness — Plus Maths](https://plus.maths.org/content/mathematics-kindness)
 - [Nowak, Tarnita, Wilson (2010) — The Evolution of Eusociality](https://www.nature.com/articles/nature09205)
 - [Kin Selection, Group Selection: A Controversy Without End? — OUP Blog](https://blog.oup.com/2015/01/kin-group-selection-controversy/)
+
+---
+
+## Part 4: Limitations of "Total Energy Gained" as Fitness
+
+### Current Setup
+
+Fitness is currently `total_energy_gained` — the cumulative energy a boid has eaten over the entire generation (6000 ticks). For prey this comes from food items; for predators, from catching prey. This is simple, directly measurable, and worked well enough to get evolution off the ground. But it has several structural limitations worth thinking through.
+
+### 1. Spatial Competition for a Finite Resource
+
+The world is 1300×1300 with 5 food patches of 20 items each (100 food items present at any time, replenished patch-by-patch as they're consumed). 150 prey boids compete for this food. The total energy available per generation is bounded by the food spawn rate — there's a ceiling on how much food can physically flow through the system.
+
+**Consequences:**
+- Once the population gets moderately good at finding food, fitness becomes a **zero-sum competition** among prey rather than an open-ended optimization. One boid eating more means another eating less.
+- This means natural selection is really selecting for **competitive foraging ability** (getting to food before others) rather than foraging ability per se. These may select for different traits — speed and aggression vs. efficient searching.
+- A boid that's excellent at finding food in isolation might score poorly because it's always surrounded by competitors who got there first.
+- The fitness ceiling also means diminishing returns for evolution: once the population saturates the available food, further improvement in food-finding provides diminishing marginal fitness gains.
+
+### 2. No Replacement of Dead Boids
+
+When a boid dies (energy drops to zero, or eaten by predator), it stays dead for the rest of the generation. Its `total_energy_gained` is frozen at whatever it accumulated before death.
+
+**Consequences:**
+- A boid that dies at tick 1000 with 200 energy scores less than one that survives to tick 6000 with 300 energy, even if the dead boid was a more efficient forager per unit time. Survival duration is baked into the fitness measure whether we want it or not.
+- This conflates **two different skills**: ability to find food and ability to not die. These are correlated but not identical — a boid could be great at eating but terrible at avoiding predators, or vice versa.
+- With predators active, a prey boid's fitness depends heavily on whether it happened to be near a predator, which is partly stochastic. Two genetically identical boids can have very different fitness scores based on spatial luck.
+- As boids die off during a generation, surviving boids face **reduced competition** for food in the later ticks. Late survivors get an inflating bonus simply from having fewer competitors — their per-tick energy gain rises as the population thins out.
+
+### 3. No Steady-State Population Dynamics
+
+In real ecosystems, dying animals are replaced by births, maintaining population pressure. The current model runs a fixed cohort from start to finish with no replenishment.
+
+**Consequences:**
+- The ecological dynamics shift dramatically over a generation: early ticks have intense competition (150 boids, limited food), late ticks may have sparse populations with abundant food.
+- This means the **selection environment changes over the course of evaluation**. Early survivors are selected for competing in crowds; late survivors are selected for doing well in emptier worlds. These may favour different strategies.
+- With predators, the predator-prey ratio changes over the generation as prey die off. Predators that eat efficiently early may starve later when few prey remain. This makes predator fitness partially dependent on the order in which prey happen to be caught.
+
+### 4. Generation-Level Evaluation Masks Temporal Dynamics
+
+Because fitness is a single cumulative number over the whole generation, it obscures *when* energy was gained.
+
+**Possible issues:**
+- A boid that gains energy steadily (good forager) looks identical to one that stumbled onto a food patch early and then did nothing useful.
+- There's no penalty for **wasteful behavior** — a boid that burns energy on pointless high-speed movement but also happens to eat a lot scores the same as an efficient one with the same total.
+- Net energy (energy gained minus energy spent) might be more meaningful than gross energy gained. Currently `total_energy_gained` is purely cumulative gross intake — it only goes up, never down. Metabolic drain and thrust costs are deducted from the separate `energy` balance (which determines death) but are completely invisible to fitness. So a boid that burns energy recklessly on high-speed movement pays no direct fitness penalty for that waste — only the indirect penalty of dying sooner if it runs out of energy.
+
+### 5. Predator Fitness Has Compounding Issues
+
+For predators, fitness = total energy from catching prey. This compounds the above problems:
+
+- **Prey availability is endogenous**: a predator's fitness depends on how many prey are alive and where they are, which depends on all other predators' behavior. Two equally skilled predators get very different scores if one happens to be near prey clusters.
+- **Diminishing prey**: as predators eat prey, remaining prey become scarcer, making later catches harder. Early-eating predators inflate their scores while depleting the resource for others.
+- **Co-evolutionary coupling**: prey fitness depends on predator behavior and vice versa. A predator genome that scores well in generation N might score poorly in generation N+1 if prey have evolved better evasion — fitness is not a stable property of the genome.
+
+### Possible Directions
+
+These aren't proposals yet, just starting thoughts on what might address some of these limitations:
+
+- **Rate-based fitness**: energy gained per tick alive, rather than total — decouples survival duration from foraging ability.
+- **Multiple shorter evaluations**: run each genome through several shorter episodes with fresh starting conditions, average the results — reduces spatial luck.
+- **Steady-state population**: replace dead boids mid-generation (with random or offspring genomes) to maintain population pressure throughout.
+- **Net energy fitness**: total gained minus total spent — rewards metabolic efficiency.
+- **Relative fitness**: rank boids against cohort rather than using absolute energy — handles the zero-sum problem.
+- **Time-discounted fitness**: weight early energy gain less than late energy gain (or vice versa) to shape what temporal strategies are favoured.
+- **Separate survival and foraging components**: explicitly multi-objective fitness, e.g. `α × energy_rate + β × survival_time`.
