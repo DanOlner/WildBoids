@@ -27,6 +27,7 @@ static GenerationResult run_generation(
     const BoidSpec& predator_spec,
     const WorldConfig& config,
     int ticks,
+    FitnessMode fitness_mode,
     std::mt19937& rng)
 {
     World world(config);
@@ -77,13 +78,19 @@ static GenerationResult run_generation(
     result.prey_fitness.resize(prey_genomes.size());
     result.predator_fitness.resize(predator_genomes.size());
 
+    auto boid_fitness = [fitness_mode](const Boid& b) -> float {
+        if (fitness_mode == FitnessMode::Net)
+            return b.total_energy_gained - b.total_energy_spent;
+        return b.total_energy_gained;
+    };
+
     const auto& boids = world.get_boids();
     for (int i = 0; i < static_cast<int>(prey_genomes.size()); ++i) {
-        result.prey_fitness[i] = boids[i].total_energy_gained;
+        result.prey_fitness[i] = boid_fitness(boids[i]);
         if (boids[i].alive) ++result.prey_survivors;
     }
     for (int i = 0; i < static_cast<int>(predator_genomes.size()); ++i) {
-        result.predator_fitness[i] = boids[prey_count + i].total_energy_gained;
+        result.predator_fitness[i] = boid_fitness(boids[prey_count + i]);
         if (boids[prey_count + i].alive) ++result.predator_survivors;
     }
 
@@ -290,7 +297,8 @@ int main(int argc, char* argv[]) {
               << "  Food: " << sim.world.food_max << " max, " << sim.world.food_spawn_rate << "/s"
               << "  Metabolism: " << sim.world.metabolism_rate
               << "  Thrust cost: " << sim.world.thrust_cost
-              << "  Drag: " << sim.world.linear_drag << "/" << sim.world.angular_drag << "\n";
+              << "  Drag: " << sim.world.linear_drag << "/" << sim.world.angular_drag
+              << "  Fitness: " << (sim.fitness_mode == FitnessMode::Net ? "net" : "gross") << "\n";
 
     // Print header
     if (coevolution) {
@@ -324,6 +332,7 @@ int main(int argc, char* argv[]) {
             predator_spec,
             sim.world,
             sim.ticks_per_generation,
+            sim.fitness_mode,
             rng);
 
         // Evaluate prey fitness

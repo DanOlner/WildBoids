@@ -4,6 +4,11 @@
 #include "brain/population.h"
 #include <string>
 
+enum class FitnessMode {
+    Gross,  // total_energy_gained (cumulative intake, never decreases)
+    Net     // total_energy_gained - total_energy_spent (rewards efficiency)
+};
+
 struct SimConfig {
     WorldConfig world;
     PopulationParams neat;
@@ -12,6 +17,7 @@ struct SimConfig {
     int ticks_per_generation = 2400;
     int generations = 100;
     int save_interval = 10;
+    FitnessMode fitness_mode = FitnessMode::Gross;
 };
 
 // Load simulation config from a JSON file. Throws on parse/validation error.

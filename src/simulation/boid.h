@@ -15,7 +15,8 @@ struct Boid {
     std::vector<Thruster> thrusters;
     float energy = 100.0f;
     bool alive = true;
-    float total_energy_gained = 0.0f;  // fitness metric: total food energy eaten
+    float total_energy_gained = 0.0f;  // cumulative food energy eaten
+    float total_energy_spent = 0.0f;   // cumulative metabolism + thrust cost
     float effective_linear_drag = -1.0f; // per-boid drag (-1 = use world default)
 
     // Sensory system (optional — boids without sensors still work)

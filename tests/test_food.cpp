@@ -219,6 +219,44 @@ TEST_CASE("Fitness: total_energy_gained tracks cumulative food eaten", "[food][f
     CHECK_THAT(world.get_boids()[0].total_energy_gained, WithinAbs(10.0f, 0.01f));
 }
 
+TEST_CASE("Fitness: total_energy_spent tracks metabolism and thrust costs", "[food][fitness]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.metabolism_rate = 10.0f;  // high rate for easy measurement
+    config.thrust_cost = 0.0f;
+    World world(config);
+
+    world.add_boid(make_boid_at({100, 100}));
+
+    float dt = 1.0f / 120.0f;
+    world.step(dt);
+
+    float expected_spent = 10.0f * dt;
+    CHECK_THAT(world.get_boids()[0].total_energy_spent, WithinAbs(expected_spent, 0.001f));
+    // total_energy_gained should be unaffected
+    CHECK_THAT(world.get_boids()[0].total_energy_gained, WithinAbs(0.0f, 0.001f));
+}
+
+TEST_CASE("Fitness: net = gained - spent", "[food][fitness]") {
+    WorldConfig config;
+    config.width = 800; config.height = 800;
+    config.food_eat_radius = 10.0f;
+    config.metabolism_rate = 10.0f;
+    config.thrust_cost = 0.0f;
+    World world(config);
+
+    world.add_boid(make_boid_at({100, 100}));
+    world.add_food(Food{{100, 100}, 20.0f});
+
+    float dt = 1.0f / 120.0f;
+    world.step(dt);
+
+    const auto& b = world.get_boids()[0];
+    float net = b.total_energy_gained - b.total_energy_spent;
+    float expected_net = 20.0f - 10.0f * dt;
+    CHECK_THAT(net, WithinAbs(expected_net, 0.001f));
+}
+
 // --- Directional mouth tests ---
 
 TEST_CASE("Mouth: boid facing food and moving toward it eats", "[food][mouth]") {

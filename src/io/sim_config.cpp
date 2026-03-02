@@ -111,6 +111,9 @@ SimConfig load_sim_config(const std::string& path) {
         cfg.ticks_per_generation = ev.value("ticksPerGeneration", cfg.ticks_per_generation);
         cfg.generations = ev.value("generations", cfg.generations);
         cfg.save_interval = ev.value("saveInterval", cfg.save_interval);
+        std::string fm = ev.value("fitnessMode", std::string("gross"));
+        if (fm == "net") cfg.fitness_mode = FitnessMode::Net;
+        else cfg.fitness_mode = FitnessMode::Gross;
     }
 
     // NEAT parameters

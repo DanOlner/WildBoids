@@ -292,10 +292,14 @@ void World::deduct_energy(float dt) {
         if (!boid.alive) continue;
 
         // Metabolism cost
-        boid.energy -= config_.metabolism_rate * dt;
+        float metabolism = config_.metabolism_rate * dt;
+        boid.energy -= metabolism;
+        boid.total_energy_spent += metabolism;
 
         // Thrust cost
-        boid.energy -= config_.thrust_cost * boid.total_thrust() * dt;
+        float thrust_cost = config_.thrust_cost * boid.total_thrust() * dt;
+        boid.energy -= thrust_cost;
+        boid.total_energy_spent += thrust_cost;
 
         // Death
         if (boid.energy <= 0.0f) {

@@ -116,3 +116,42 @@ TEST_CASE("Sim config: missing mode defaults to uniform", "[sim_config]") {
 
     std::filesystem::remove(tmp_path);
 }
+
+TEST_CASE("Sim config: fitnessMode defaults to gross", "[sim_config]") {
+    std::string tmp_path = "test_fitness_default.json";
+    {
+        std::ofstream f(tmp_path);
+        f << R"({"evolution": {"populationSize": 50}})";
+    }
+
+    SimConfig cfg = load_sim_config(tmp_path);
+    CHECK(cfg.fitness_mode == FitnessMode::Gross);
+
+    std::filesystem::remove(tmp_path);
+}
+
+TEST_CASE("Sim config: fitnessMode net parsed", "[sim_config]") {
+    std::string tmp_path = "test_fitness_net.json";
+    {
+        std::ofstream f(tmp_path);
+        f << R"({"evolution": {"fitnessMode": "net"}})";
+    }
+
+    SimConfig cfg = load_sim_config(tmp_path);
+    CHECK(cfg.fitness_mode == FitnessMode::Net);
+
+    std::filesystem::remove(tmp_path);
+}
+
+TEST_CASE("Sim config: fitnessMode gross parsed", "[sim_config]") {
+    std::string tmp_path = "test_fitness_gross.json";
+    {
+        std::ofstream f(tmp_path);
+        f << R"({"evolution": {"fitnessMode": "gross"}})";
+    }
+
+    SimConfig cfg = load_sim_config(tmp_path);
+    CHECK(cfg.fitness_mode == FitnessMode::Gross);
+
+    std::filesystem::remove(tmp_path);
+}
