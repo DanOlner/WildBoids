@@ -185,24 +185,39 @@ void Renderer::draw_food(const std::vector<Food>& food, const WorldConfig& confi
 // tint: 0 = green (short-range default), 1 = blue/cyan (long-range)
 void Renderer::draw_one_arc(const Boid& boid, const WorldConfig& config,
                              float center_angle, float arc_width, float max_range, float signal,
-                             int tint) {
+                             int channel_tint, bool long_range) {
+    // Apply sqrt curve so weak signals are still clearly visible
+    float s = (signal > 0.0f) ? std::sqrt(signal) : 0.0f;
+
     Uint8 r, g, b;
-    if (tint == 1) {
-        // Blue/cyan for long-range eyes
-        r = static_cast<Uint8>(60 * (1.0f - signal));
-        g = static_cast<Uint8>(80 + signal * 175);
-        b = static_cast<Uint8>(120 + signal * 135);
-    } else {
-        // Green for short-range eyes (original)
-        r = static_cast<Uint8>(signal * 200);
-        g = static_cast<Uint8>(80 + signal * 175);
-        b = static_cast<Uint8>(120 * (1.0f - signal));
+    Uint8 base = long_range ? 40 : 60;  // dimmer baseline for long-range
+    switch (channel_tint) {
+        case 0:  // Food — yellow/orange
+            r = static_cast<Uint8>(base + s * (220 - base));
+            g = static_cast<Uint8>(base + s * (180 - base));
+            b = static_cast<Uint8>(base * (1.0f - s));
+            break;
+        case 1:  // Same — blue/cyan
+            r = static_cast<Uint8>(base * (1.0f - s));
+            g = static_cast<Uint8>(base + s * (180 - base));
+            b = static_cast<Uint8>(base + s * (255 - base));
+            break;
+        case 2:  // Opposite — red/magenta
+            r = static_cast<Uint8>(base + s * (255 - base));
+            g = static_cast<Uint8>(base * (1.0f - s));
+            b = static_cast<Uint8>(base + s * (80 - base));
+            break;
+        default:  // Inactive — dim grey
+            r = g = b = base;
+            break;
     }
     SDL_SetRenderDrawColor(renderer_, r, g, b, 180);
 
+    // Negate center_angle: sensor angles use atan2(x,y) convention where
+    // positive = clockwise (right), but rotated() uses standard CCW convention.
     float world_angle = boid.body.angle;
-    float arc_start = world_angle + center_angle - arc_width * 0.5f;
-    float arc_end   = world_angle + center_angle + arc_width * 0.5f;
+    float arc_start = world_angle - center_angle - arc_width * 0.5f;
+    float arc_end   = world_angle - center_angle + arc_width * 0.5f;
     Vec2 pos = boid.body.position;
 
     // Radial lines
@@ -240,31 +255,37 @@ void Renderer::draw_sensor_arcs(const Boid& boid, const WorldConfig& config) {
         int n_channels = static_cast<int>(cfg.channels.size());
         int n_short = cfg.short_range_eye_count();
 
-        // Short-range eyes (green tint)
-        for (int e = 0; e < n_short; ++e) {
-            const auto& eye = cfg.eyes[e];
+        // Helper: find dominant channel and its signal for an eye
+        auto find_dominant = [&](int out_offset, int eye_idx) -> std::pair<float, int> {
             float max_signal = 0.0f;
+            int dominant_ch = 3; // inactive
             for (int c = 0; c < n_channels; ++c) {
-                int idx = e * n_channels + c;
+                int idx = out_offset + eye_idx * n_channels + c;
                 if (idx < static_cast<int>(boid.sensor_outputs.size())) {
-                    max_signal = std::max(max_signal, boid.sensor_outputs[idx]);
+                    float v = boid.sensor_outputs[idx];
+                    if (v > max_signal) {
+                        max_signal = v;
+                        // Map channel enum to tint: Food=0, Same=1, Opposite=2
+                        dominant_ch = static_cast<int>(cfg.channels[c]);
+                    }
                 }
             }
-            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, max_signal);
+            return {max_signal, dominant_ch};
+        };
+
+        // Short-range eyes
+        for (int e = 0; e < n_short; ++e) {
+            const auto& eye = cfg.eyes[e];
+            auto [signal, tint] = find_dominant(0, e);
+            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, signal, tint, false);
         }
 
-        // Long-range eyes (blue/cyan tint)
+        // Long-range eyes
         int long_offset = n_short * n_channels;
         for (int e = 0; e < cfg.long_range_eye_count(); ++e) {
             const auto& eye = cfg.long_range_eyes[e];
-            float max_signal = 0.0f;
-            for (int c = 0; c < n_channels; ++c) {
-                int idx = long_offset + e * n_channels + c;
-                if (idx < static_cast<int>(boid.sensor_outputs.size())) {
-                    max_signal = std::max(max_signal, boid.sensor_outputs[idx]);
-                }
-            }
-            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, max_signal, 1);
+            auto [signal, tint] = find_dominant(long_offset, e);
+            draw_one_arc(boid, config, eye.center_angle, eye.arc_width, eye.max_range, signal, tint, true);
         }
     } else {
         // Legacy sensor arcs

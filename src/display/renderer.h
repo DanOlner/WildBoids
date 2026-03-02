@@ -53,9 +53,9 @@ private:
   void draw_thruster_indicators(const Boid &boid, const WorldConfig &config);
   void draw_neighbour_lines(const World &world);
   void draw_sensor_arcs(const Boid &boid, const WorldConfig &config);
-  // tint: 0 = green (short-range), 1 = blue/cyan (long-range)
+  // channel_tint: 0=food(yellow), 1=same(blue), 2=opposite(red), 3=inactive(dim)
   void draw_one_arc(const Boid &boid, const WorldConfig &config,
                     float center_angle, float arc_width, float max_range, float signal,
-                    int tint = 0);
+                    int channel_tint = 3, bool long_range = false);
   void draw_food(const std::vector<Food> &food, const WorldConfig &config);
 };

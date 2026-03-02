@@ -1,6 +1,10 @@
 #include "display/app.h"
+#include "simulation/toroidal.h"
+#include "simulation/sensor.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
+#include <fstream>
 #include <iostream>
 
 App::App(World& world, Renderer& renderer, std::mt19937& rng)
@@ -65,49 +69,105 @@ void App::handle_events() {
                             renderer_.set_show_sensors(!renderer_.show_sensors());
                             break;
                         case SDL_SCANCODE_P: {
-                            // Debug: dump first predator's sensor outputs
+                            // Dump full sensor diagnostic CSV for first predator
                             const auto& boids = world_.get_boids();
-                            for (const auto& b : boids) {
-                                if (b.type != "predator" || !b.alive || !b.sensors) continue;
-                                const auto& cfg = b.sensors->compound_config();
+                            const auto& wconfig = world_.get_config();
+                            const auto& food = world_.get_food();
+                            const auto& grid = world_.grid();
+                            constexpr float RAD2DEG = 180.0f / 3.14159265f;
+
+                            for (const auto& self : boids) {
+                                if (self.type != "predator" || !self.alive || !self.sensors) continue;
+                                if (!self.sensors->is_compound()) break;
+                                const auto& cfg = self.sensors->compound_config();
                                 int n_ch = static_cast<int>(cfg.channels.size());
                                 int n_short = cfg.short_range_eye_count();
                                 int n_long = cfg.long_range_eye_count();
-                                std::cerr << "=== Predator sensor dump ===\n";
-                                std::cerr << "sensor_outputs.size()=" << b.sensor_outputs.size()
-                                          << " expected=" << cfg.total_inputs() << "\n";
-                                std::cerr << "n_short=" << n_short << " n_long=" << n_long
-                                          << " n_channels=" << n_ch << "\n";
-                                std::cerr << "Short-range eyes:\n";
+
+                                // Find max range across all eyes for entity query
+                                float max_range = 0;
+                                for (const auto& eye : cfg.eyes) max_range = std::max(max_range, eye.max_range);
+                                for (const auto& eye : cfg.long_range_eyes) max_range = std::max(max_range, eye.max_range);
+
+                                std::ofstream csv("sensor_debug.csv");
+
+                                // Section 1: Self
+                                csv << "# Self\n";
+                                csv << "self_x,self_y,self_angle_deg,self_type\n";
+                                csv << self.body.position.x << "," << self.body.position.y << ","
+                                    << self.body.angle * RAD2DEG << "," << self.type << "\n\n";
+
+                                // Section 2: Nearby entities
+                                csv << "# Nearby entities\n";
+                                csv << "entity_type,world_x,world_y,delta_x,delta_y,body_angle_deg,distance,channel\n";
+
+                                // Boids
+                                std::vector<int> candidates;
+                                grid.query(self.body.position, max_range, candidates);
+                                for (int j : candidates) {
+                                    if (&boids[j] == &self) continue;
+                                    if (!boids[j].alive) continue;
+                                    Vec2 delta = toroidal_delta(self.body.position, boids[j].body.position,
+                                                                 wconfig.width, wconfig.height);
+                                    float dist = std::sqrt(delta.length_squared());
+                                    if (dist > max_range) continue;
+                                    Vec2 body_delta = delta.rotated(-self.body.angle);
+                                    float angle = std::atan2(body_delta.x, body_delta.y);
+                                    std::string ch = (boids[j].type == self.type) ? "same" : "opposite";
+                                    csv << boids[j].type << "," << boids[j].body.position.x << ","
+                                        << boids[j].body.position.y << "," << delta.x << "," << delta.y << ","
+                                        << angle * RAD2DEG << "," << dist << "," << ch << "\n";
+                                }
+
+                                // Food
+                                for (const auto& f : food) {
+                                    Vec2 delta = toroidal_delta(self.body.position, f.position,
+                                                                 wconfig.width, wconfig.height);
+                                    float dist = std::sqrt(delta.length_squared());
+                                    if (dist > max_range) continue;
+                                    Vec2 body_delta = delta.rotated(-self.body.angle);
+                                    float angle = std::atan2(body_delta.x, body_delta.y);
+                                    csv << "food," << f.position.x << "," << f.position.y << ","
+                                        << delta.x << "," << delta.y << ","
+                                        << angle * RAD2DEG << "," << dist << ",food\n";
+                                }
+
+                                // Section 3: Eye activations
+                                csv << "\n# Eye activations\n";
+                                csv << "tier,eye_id,center_angle_deg,arc_width_deg,max_range";
+                                for (int c = 0; c < n_ch; ++c) {
+                                    if (cfg.channels[c] == SensorChannel::Food) csv << ",food_signal";
+                                    else if (cfg.channels[c] == SensorChannel::Same) csv << ",same_signal";
+                                    else if (cfg.channels[c] == SensorChannel::Opposite) csv << ",opposite_signal";
+                                }
+                                csv << "\n";
+
                                 for (int e = 0; e < n_short; ++e) {
-                                    float max_sig = 0;
+                                    const auto& eye = cfg.eyes[e];
+                                    csv << "short," << e << "," << eye.center_angle * RAD2DEG << ","
+                                        << eye.arc_width * RAD2DEG << "," << eye.max_range;
                                     for (int c = 0; c < n_ch; ++c) {
                                         int idx = e * n_ch + c;
-                                        float v = b.sensor_outputs[idx];
-                                        if (v > 0.01f)
-                                            std::cerr << "  eye[" << e << "] ch=" << c
-                                                      << " angle=" << (cfg.eyes[e].center_angle * 180/3.14159f)
-                                                      << "deg val=" << v << "\n";
-                                        max_sig = std::max(max_sig, v);
+                                        csv << "," << self.sensor_outputs[idx];
                                     }
+                                    csv << "\n";
                                 }
+
                                 int long_off = n_short * n_ch;
-                                std::cerr << "Long-range eyes (offset=" << long_off << "):\n";
                                 for (int e = 0; e < n_long; ++e) {
+                                    const auto& eye = cfg.long_range_eyes[e];
+                                    csv << "long," << e << "," << eye.center_angle * RAD2DEG << ","
+                                        << eye.arc_width * RAD2DEG << "," << eye.max_range;
                                     for (int c = 0; c < n_ch; ++c) {
                                         int idx = long_off + e * n_ch + c;
-                                        float v = b.sensor_outputs[idx];
-                                        if (v > 0.01f)
-                                            std::cerr << "  long_eye[" << e << "] ch=" << c
-                                                      << " angle=" << (cfg.long_range_eyes[e].center_angle * 180/3.14159f)
-                                                      << "deg val=" << v << "\n";
+                                        csv << "," << self.sensor_outputs[idx];
                                     }
+                                    csv << "\n";
                                 }
-                                int pi = (n_short + n_long) * n_ch;
-                                std::cerr << "Proprioceptive (from idx " << pi << "):";
-                                for (int i = pi; i < static_cast<int>(b.sensor_outputs.size()); ++i)
-                                    std::cerr << " " << b.sensor_outputs[i];
-                                std::cerr << "\n";
+
+                                csv.close();
+                                std::cerr << "Wrote sensor_debug.csv for predator at ("
+                                          << self.body.position.x << ", " << self.body.position.y << ")\n";
                                 break; // just first predator
                             }
                             break;
