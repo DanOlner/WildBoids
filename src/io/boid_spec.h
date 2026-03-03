@@ -22,6 +22,7 @@ struct BoidSpec {
     float mass = 1.0f;
     float moment_of_inertia = 1.0f;
     float initial_energy = 100.0f;
+    std::optional<float> metabolism_rate; // overrides world default if set
     std::vector<ThrusterSpec> thrusters;
     std::vector<SensorSpec> sensors;                // legacy flat sensor list
     std::optional<CompoundEyeConfig> compound_eyes; // new compound-eye format

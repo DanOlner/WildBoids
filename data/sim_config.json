@@ -1,7 +1,7 @@
 {
     "world": {
-        "width": 1300,
-        "height": 1300,
+        "width": 3000,
+        "height": 3000,
         "toroidal": true,
         "linearDrag": 0.2,
         "angularDrag": 2.25,

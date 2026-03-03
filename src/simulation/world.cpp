@@ -291,8 +291,9 @@ void World::deduct_energy(float dt) {
     for (auto& boid : boids_) {
         if (!boid.alive) continue;
 
-        // Metabolism cost
-        float metabolism = config_.metabolism_rate * dt;
+        // Metabolism cost (per-boid rate overrides world default)
+        float rate = (boid.metabolism_rate >= 0.0f) ? boid.metabolism_rate : config_.metabolism_rate;
+        float metabolism = rate * dt;
         boid.energy -= metabolism;
         boid.total_energy_spent += metabolism;
 

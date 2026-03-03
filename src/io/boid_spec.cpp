@@ -114,6 +114,9 @@ BoidSpec load_boid_spec(const std::string& path) {
     spec.mass = j.at("mass").get<float>();
     spec.moment_of_inertia = j.at("momentOfInertia").get<float>();
     spec.initial_energy = j.at("initialEnergy").get<float>();
+    if (j.contains("metabolismRate")) {
+        spec.metabolism_rate = j.at("metabolismRate").get<float>();
+    }
 
     for (const auto& jt : j.at("thrusters")) {
         ThrusterSpec ts;
@@ -211,6 +214,9 @@ Boid create_boid_from_spec(const BoidSpec& spec) {
     boid.body.mass = spec.mass;
     boid.body.moment_of_inertia = spec.moment_of_inertia;
     boid.energy = spec.initial_energy;
+    if (spec.metabolism_rate.has_value()) {
+        boid.metabolism_rate = *spec.metabolism_rate;
+    }
 
     for (const auto& ts : spec.thrusters) {
         Thruster t;
@@ -243,6 +249,9 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
     j["mass"] = spec.mass;
     j["momentOfInertia"] = spec.moment_of_inertia;
     j["initialEnergy"] = spec.initial_energy;
+    if (spec.metabolism_rate.has_value()) {
+        j["metabolismRate"] = *spec.metabolism_rate;
+    }
 
     j["thrusters"] = json::array();
     for (const auto& ts : spec.thrusters) {

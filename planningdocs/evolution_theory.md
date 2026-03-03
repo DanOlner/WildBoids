@@ -321,6 +321,94 @@ The original didn't implement mutation, but [research suggests it's important](h
 - **Pareto coevolution**: Maintain diverse strategies that beat different opponents
 - **Spatial structure**: Local neighborhoods allow strategy diversity ([research](https://ccl.northwestern.edu/2007/gecco2007.pdf))
 
+#### Observed in Wild Boids: Later Generations Aren't Always Better
+
+In a 500-generation co-evolution run with net fitness, the best-performing champions (visually assessed for feeding accuracy, efficient thruster use, and predator-prey dynamics) came from around generations 25–35, not 400+. Several interacting factors explain this:
+
+**Red Queen in practice.** A gen-400 prey champion has high fitness *against gen-400 predators* but may perform worse in isolation or against earlier predators. Both populations specialize against the opponent they're currently facing, not against a general challenge. The fitness numbers climb (relative to current opponents) but the absolute quality of behavior can plateau or regress.
+
+**Cycling/oscillation.** Rather than monotonic improvement, the populations chase each other through strategy space: prey evolve strategy A → predators counter with B → prey abandon A for C → predators shift to D → prey rediscover something like A. The populations oscillate without necessarily climbing a fixed hill.
+
+**Overfitting to current opponent.** With a single predator population and single prey population evaluating each generation against each other, both can overfit to specific strategies present right now. Early-generation champions may be more *general* foragers/hunters before specialization narrows the repertoire.
+
+**Diversity loss under NEAT speciation.** Over hundreds of generations, species stagnate and get culled, reducing strategy diversity. Surviving species may converge on a local optimum narrower than what existed at gen 35.
+
+**Net fitness efficiency trap.** Net fitness rewards minimizing spending, which can push evolution toward *too* conservative strategies — boids that save energy so aggressively they don't explore or react fast enough. Early generations may have struck a better balance between efficiency and activity.
+
+### Hall of Fame and Cross-Testing: Design Ideas for Wild Boids
+
+The core insight: evaluating genomes only against the current generation's opponents produces a noisy, shifting fitness landscape. Testing against a curated set of historical opponents provides a more stable signal and prevents the loss of general-purpose strategies.
+
+#### 1. Champion Archive
+
+Save champion genomes at regular intervals (already done via `--save-best` and `--save-interval`). The archive becomes a library of opponents at different evolutionary stages.
+
+**What we already have:**
+- `data/champions/champion_prey_genN.json` and `data/champions/predators/champion_predator_genN.json` saved periodically
+- Each champion includes the full boid spec + NEAT genome, so it can be loaded and instantiated
+
+**What we'd need to add:**
+- A manifest or index of archived champions with metadata (generation, fitness score, fitness mode, config hash)
+- Tagging: mark specific champions as "notable" (e.g. gen-35 prey, gen-25 predator) for use as benchmarks
+
+#### 2. Hall of Fame Evaluation
+
+During evolution, evaluate each genome not just against the current opponent population but also against a set of historical champions.
+
+**Simple version — mixed opponents:**
+- Each generation, fill some fraction of the opponent slots (e.g. 20–30%) with genomes drawn from the champion archive rather than from the current evolving population
+- Prey population faces a mix of current-gen predators and historical champion predators
+- This creates selection pressure for generality: a genome must perform well against diverse opponents, not just the current one
+
+**Implementation sketch:**
+- `run_generation()` already takes genome vectors for prey and predators
+- Before calling it, replace some fraction of the predator genomes with archived champion genomes (loaded from JSON)
+- The archived predators don't evolve — they're fixed opponents providing a stable fitness baseline
+- Same in reverse for predator evaluation: some prey are historical champions
+
+**Considerations:**
+- What fraction of opponents should be historical? Too many and current-gen evolution stalls (opponents don't co-adapt). Too few and the stabilizing effect is negligible. Literature suggests 20–30% is a reasonable starting point.
+- Should the archive grow indefinitely, or be curated? Options: fixed-size ring buffer (newest replaces oldest), or Pareto front (keep champions that beat different opponents).
+
+#### 3. Cross-Testing / Tournament Mode
+
+A separate evaluation mode (not during evolution) that pits any champion against any other:
+
+**Round-robin tournament:**
+- Take N prey champions and M predator champions from the archive
+- Run every prey×predator combination for K ticks
+- Produce a matrix of scores: how well does prey_i do against predator_j?
+- Identifies which champions are genuinely strong (good against many opponents) vs. specialists (good only against their co-evolved opponent)
+
+**Implementation approach:**
+- Could be a mode of the headless runner: `--tournament --prey-dir data/champions/ --predator-dir data/champions/predators/`
+- Load all champion specs from the directories, run the combinatorial evaluation, output a results matrix as CSV
+- Each cell: net fitness of prey champion i against predator champion j (and vice versa for predator fitness)
+
+**Uses:**
+- Identify the most *robust* champion across opponents (the one with highest minimum or mean score across all opponents)
+- Detect cycling: if gen-35 prey beats gen-400 predator but gen-400 prey loses to gen-35 predator, that's evidence of Red Queen oscillation
+- Select seeds for future evolution runs: start from the most robust champion rather than the latest one
+
+#### 4. Staged / Curriculum Evolution
+
+Rather than a single long run, break evolution into stages with different opponent pools:
+
+- **Stage 1 (gen 0–50):** Evolve prey against random/minimal predators. Goal: learn basic foraging.
+- **Stage 2 (gen 50–150):** Introduce the best prey champion from stage 1 as a seed, evolve against increasingly competent predators (drawn from a separately evolved predator archive).
+- **Stage 3 (gen 150+):** Full co-evolution, seeded from stage 2 champions, with hall of fame opponents mixed in.
+
+This avoids the problem where early co-evolution is dominated by random noise (neither population can do anything useful yet, so there's no selection signal), while later stages benefit from the stabilizing effect of historical opponents.
+
+#### 5. Fitness Aggregation Across Opponents
+
+If evaluating against multiple opponents per generation, how to combine scores?
+
+- **Mean fitness:** rewards generalists. Risk: a genome that's mediocre against everyone beats one that's excellent against most but terrible against one.
+- **Minimum fitness:** rewards worst-case robustness. Very conservative — may prevent specialization.
+- **Weighted mean:** weight recent opponents more heavily than ancient ones, balancing adaptation and generality.
+- **Pareto ranking:** no single score — maintain a Pareto front of genomes that are non-dominated across opponent matchups. NEAT's speciation already provides some of this structure.
+
 ---
 
 ## Recommendations for Wild Boids 2.0

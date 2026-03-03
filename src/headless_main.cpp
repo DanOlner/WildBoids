@@ -295,8 +295,12 @@ int main(int argc, char* argv[]) {
               << "  Prey pop: " << sim.neat.population_size
               << "  Ticks/gen: " << sim.ticks_per_generation
               << "  Food: " << sim.world.food_max << " max, " << sim.world.food_spawn_rate << "/s"
-              << "  Metabolism: " << sim.world.metabolism_rate
-              << "  Thrust cost: " << sim.world.thrust_cost
+              << "  Metabolism: " << sim.world.metabolism_rate;
+    if (prey_spec.metabolism_rate.has_value())
+        std::cerr << " (prey: " << *prey_spec.metabolism_rate << ")";
+    if (coevolution && predator_spec.metabolism_rate.has_value())
+        std::cerr << " (pred: " << *predator_spec.metabolism_rate << ")";
+    std::cerr << "  Thrust cost: " << sim.world.thrust_cost
               << "  Drag: " << sim.world.linear_drag << "/" << sim.world.angular_drag
               << "  Fitness: " << (sim.fitness_mode == FitnessMode::Net ? "net" : "gross") << "\n";
 

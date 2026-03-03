@@ -1,5 +1,9 @@
 # Actual human notes
 
+## Things to follow up
+
+- ["in which I analyze ANNs when used as scientific instruments of study and when functioning as emergent arbiters of the zeitgeist in the cognitive, computational, and neural sciences."](https://bsky.app/profile/olivia.science/post/3mg5ojrl4p22i)
+
 ## Sim log
 
 ### 22.2.26

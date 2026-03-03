@@ -2541,3 +2541,95 @@ The narrow fixed arcs on long-range eyes are key to making position evolution me
 
 This mirrors biology: insect compound eyes have fixed ommatidia positions but varying facet sizes (resolution), while vertebrate eyes have fixed optics but movable direction (saccades, head turning). We're giving each tier its own biologically-distinct degree of freedom.
 
+---
+
+## Option N — Predator energy pressure tuning
+
+**Problem:** Predators never die during tournaments. With 100 starting energy, 0.1/s metabolism, and 200s tournaments (12,000 ticks), minimum drain is only 20 energy — 20% of the budget. One catch (+50) makes a predator effectively immortal. This means no survival pressure on predators, weakening co-evolutionary dynamics.
+
+**Energy budget (current):**
+- Starting energy: 100
+- Metabolism drain over 200s: ~20 (metabolism only) to ~30-40 (with thrust)
+- One catch: +50 energy
+- Result: predators always survive (pred_survivors = 70 in every generation of 500-gen run)
+
+### Option N.1 — Increase metabolism rate (simplest, no code change)
+
+Raise `metabolismRate` so a zero-catch predator dies ~60-70% through the tournament. Target: 0.4–0.5/s (4-5× current). At 0.5/s, drain = 100 energy in 200s — predator must catch at least one prey to survive. One catch (+50) buys another 100s.
+
+Can test immediately via CLI override:
+```bash
+./build-release/wildboids_headless --predator-spec data/simple_predator.json \
+  --predator-population 30 --generations 100 --save-best --metabolism 0.5
+```
+
+**Downside:** Affects prey too. Higher metabolism means prey must eat more food, which may over-tighten the prey energy budget and reduce prey survival independent of predation.
+
+### Option N.2 — Reduce starting energy
+
+Drop starting energy from 100 to 30-40. Same metabolism rate, but much tighter budget — predators start on a clock and must hunt quickly. Simple config change (in boid.h default or via new config field).
+
+**Downside:** Also affects prey unless made per-type.
+
+### Option N.3 — Per-type metabolism rates (recommended)
+
+Add `predatorMetabolismRate` to `sim_config.json` under the `"predator"` section. In `World::deduct_energy()`, use the predator-specific rate for predator boids, base rate for prey. This decouples the two survival pressures entirely.
+
+```json
+"predator": {
+    "catchRadius": 5.0,
+    "catchEnergy": 50.0,
+    "metabolismRate": 0.5
+}
+```
+
+Small code change: ~5 lines in `sim_config` (load the field), ~3 lines in `World::deduct_energy()` (check boid type, pick rate). Gives clean independent control for tuning co-evolutionary balance.
+
+### Option N.4 — Adaptive tournament length
+
+Run until N% of one population dies, rather than fixed ticks. Ensures meaningful selection pressure regardless of energy parameters. But makes generation times unpredictable and complicates logging/comparison across runs.
+
+### NEAT population dynamics when boids die mid-tournament
+
+**How it works now:** Dead boids still get a fitness score (their `total_energy_gained - total_energy_spent` at time of death). `Population::advance_generation()` always produces exactly `population_size` offspring regardless of how many boids survived. Dead boids' genomes participate in selection, crossover, and speciation the same as living ones — they just tend to have lower fitness because they stopped accumulating energy when they died.
+
+**This is actually fine for NEAT.** Here's why:
+
+1. **Dead boids aren't removed from the gene pool — they're penalised.** A predator that starves at tick 3000 has lower net energy than one that survived to tick 12000 and caught multiple prey. NEAT's tournament selection and fitness-proportional offspring allocation naturally favours survivors. The dead genome still contributes to species diversity and can be a crossover partner, but it's unlikely to be selected as a parent because its fitness is low.
+
+2. **NEAT needs the full population for healthy speciation.** Fitness sharing divides each genome's fitness by its species size. If half the predators die and are excluded, the remaining species have artificially small sizes, inflating their adjusted fitness. A species with 2 survivors that should have 10 members would get 5× the per-member adjusted fitness it deserves. This distorts offspring allocation. Keeping dead genomes in the pool with low fitness maintains correct species sizes and fair sharing.
+
+3. **Elitism is already protected.** The top genome per species survives unchanged to the next generation. If any predator in a species survived the tournament, it will likely be the elite. If the entire species died, the elite is the one that lasted longest — still the best available signal.
+
+4. **The real selection pressure comes from the fitness gradient, not from exclusion.** What matters is that surviving predators have *meaningfully higher* fitness than dead ones. With net-energy fitness, a predator that starved early might score -15 while a successful hunter scores +80. That's a strong gradient for NEAT to climb.
+
+**When it could go wrong:**
+
+- If *nearly all* predators die (say 28 of 30), you're left with very few genomes carrying useful signal. Species that lost all members reproduce from their "least bad" corpse, which is noise. This is the scenario to watch for — if `pred_survivors` drops below ~30% of the population, the NEAT step is mostly reproducing from failure.
+- If the fitness difference between "died at tick 2000" and "died at tick 4000" is tiny compared to noise, NEAT can't distinguish them and selection becomes random drift among the dead.
+
+**Recommendation:** Option N.3 (per-type metabolism) is the right first step. Tune the predator metabolism so that ~40-70% of predators survive each tournament. This gives NEAT a healthy mix: enough survivors carrying good signal, enough deaths to create a meaningful fitness gradient, and enough population for speciation to work correctly.
+
+### Option N.5 — In-tournament reproduction (steady-state evolution)
+
+An alternative model: instead of running a fixed tournament then doing a NEAT generation step, allow reproduction *during* the tournament. When a predator catches prey, it could spawn an offspring (mutated copy) that replaces a random dead or low-energy predator. This creates a steady-state evolutionary dynamic within each tournament.
+
+**Pros:**
+- Directly rewards hunting success with reproductive success — tighter selection loop
+- No wasted evaluation time on genomes that died early
+- More biologically realistic — populations dynamically equilibrate
+- Could discover strategies that exploit temporal dynamics (e.g. hunting in waves)
+
+**Cons:**
+- Breaks the clean NEAT generational model. NEAT's speciation, fitness sharing, and offspring allocation assume a discrete generation boundary where the entire population is evaluated, ranked, and reproduced simultaneously. Steady-state reproduction within a tournament means:
+  - Species assignments become stale mid-tournament (new offspring may not match their parent's species)
+  - Fitness sharing denominators change as species grow/shrink
+  - Elitism has no clear meaning (there's no "generation end" to preserve elites across)
+  - Innovation tracking assumes generation boundaries for convergent innovation detection
+- Harder to log and compare across runs (no clean per-generation metrics)
+- Risk of premature convergence: one successful early hunter could flood the population with copies of itself before other strategies have time to develop
+
+**If pursued:** A simpler variant would be to keep NEAT's generational structure but run *multiple shorter sub-tournaments per generation*. E.g. instead of one 12,000-tick tournament, run 3× 4,000-tick tournaments with the same genomes and average the fitness. This gives more evaluation samples per genome without breaking NEAT's assumptions. It also means an unlucky early death in one sub-tournament doesn't eliminate an otherwise good genome — it still gets evaluated in the other two.
+
+**Recommendation:** Start with Option N.3 (per-type metabolism) to create genuine predator mortality, then monitor the survival rate. If the NEAT step is producing good results with 40-70% survival, there's no need for in-tournament breeding. Only consider N.5 if the discrete generation model hits a ceiling.
+

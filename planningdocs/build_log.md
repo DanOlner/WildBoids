@@ -764,3 +764,25 @@ Added a second tier of long-range narrow eyes alongside the existing short-range
 **Renderer:** Long-range eye arcs display in blue/cyan (vs green for short-range) in the sensor overlay (S key), making the two tiers visually distinct.
 
 **261 tests, all passing** (241 previous + 7 sensor + 2 boid_spec + 1 existing test update).
+
+---
+
+### Option N (partial): Per-boid metabolism rate (261 → 266 tests) [3.3.26]
+
+Added optional per-boid metabolism rate so predators and prey can have independent energy drain. Previously `metabolism_rate` was a world-level property applied uniformly to all boids. Now boid specs can include an optional `"metabolismRate"` field that overrides the world default — follows the same `-1 = use world default` pattern as `effective_linear_drag`.
+
+**Motivation:** Co-evolution runs showed predators never dying during tournaments (`pred_survivors` always = 70). With world metabolism 0.1/s and 200s tournaments, minimum drain was only 20 of 100 energy — one catch (+50) made predators immortal. Predator metabolism set to 0.5/s drains 100 energy in 200s, forcing predators to hunt to survive.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/io/boid_spec.h` | Added `std::optional<float> metabolism_rate` to `BoidSpec` |
+| `src/simulation/boid.h` | Added `float metabolism_rate = -1.0f` to `Boid` (negative = use world default) |
+| `src/io/boid_spec.cpp` | Parse/save optional `"metabolismRate"` in load, save, and `create_boid_from_spec()` |
+| `src/simulation/world.cpp` | `deduct_energy()` checks `boid.metabolism_rate >= 0` before falling back to `config_.metabolism_rate` |
+| `data/simple_predator.json` | Added `"metabolismRate": 0.5` (5× the world default of 0.1) |
+
+**Backward compatibility:** Boid specs without `"metabolismRate"` (including all existing champions) continue using the world default. The field is optional in both `BoidSpec` (as `std::optional`) and `Boid` (as `-1.0f` sentinel). `save_boid_spec()` only writes the key if the optional has a value, so round-tripping old specs doesn't inject the field.
+
+**266 tests, all passing** (261 previous + 5 existing tests re-validated with new field).

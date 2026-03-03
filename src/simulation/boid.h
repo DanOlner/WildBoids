@@ -18,6 +18,7 @@ struct Boid {
     float total_energy_gained = 0.0f;  // cumulative food energy eaten
     float total_energy_spent = 0.0f;   // cumulative metabolism + thrust cost
     float effective_linear_drag = -1.0f; // per-boid drag (-1 = use world default)
+    float metabolism_rate = -1.0f;       // per-boid metabolism (-1 = use world default)
 
     // Sensory system (optional — boids without sensors still work)
     std::optional<SensorySystem> sensors;
