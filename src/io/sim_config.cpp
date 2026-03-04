@@ -116,6 +116,33 @@ SimConfig load_sim_config(const std::string& path) {
         else cfg.fitness_mode = FitnessMode::Gross;
     }
 
+    // Morphology evolution
+    if (j.contains("morphologyEvolution")) {
+        const auto& me = j["morphologyEvolution"];
+        cfg.morphology.enabled = me.value("enabled", cfg.morphology.enabled);
+
+        if (me.contains("groups")) {
+            cfg.morphology.groups.clear();
+            for (const auto& jg : me["groups"]) {
+                MorphologyGroupConfig gc;
+                gc.eye_count = jg.value("eyeCount", gc.eye_count);
+                gc.total_arc_deg = jg.value("totalArcDeg", gc.total_arc_deg);
+                gc.max_range = jg.value("maxRange", gc.max_range);
+                cfg.morphology.groups.push_back(gc);
+            }
+        }
+
+        if (me.contains("mutation")) {
+            const auto& mm = me["mutation"];
+            cfg.morphology.mutation.angle_sigma_deg = mm.value("angleSigmaDeg", cfg.morphology.mutation.angle_sigma_deg);
+            cfg.morphology.mutation.arc_frac_sigma = mm.value("arcFracSigma", cfg.morphology.mutation.arc_frac_sigma);
+            cfg.morphology.mutation.angle_mutate_prob = mm.value("angleMutateProb", cfg.morphology.mutation.angle_mutate_prob);
+            cfg.morphology.mutation.arc_mutate_prob = mm.value("arcMutateProb", cfg.morphology.mutation.arc_mutate_prob);
+            cfg.morphology.mutation.replace_prob = mm.value("replaceProb", cfg.morphology.mutation.replace_prob);
+            cfg.morphology.mutation.min_arc_frac = mm.value("minArcFrac", cfg.morphology.mutation.min_arc_frac);
+        }
+    }
+
     // NEAT parameters
     if (j.contains("neat")) {
         const auto& n = j["neat"];

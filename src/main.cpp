@@ -3,6 +3,7 @@
 #include "display/renderer.h"
 #include "io/boid_spec.h"
 #include "io/sim_config.h"
+#include "simulation/morphology_genome.h"
 #include "simulation/world.h"
 #include <cstring>
 #include <iostream>
@@ -94,6 +95,33 @@ int main(int argc, char* argv[]) {
       return 1;
     }
   }
+
+  // Validate morphology config matches boid spec eye counts
+  auto validate_morpho = [&](const BoidSpec& spec, const char* label) -> bool {
+    if (spec.morphology_genome.has_value() && spec.compound_eyes.has_value()
+        && sim.morphology.enabled) {
+      std::string err = validate_morphology_config(*spec.compound_eyes, sim.morphology);
+      if (!err.empty()) {
+        std::cerr << label << " morphology config error: " << err << "\n";
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!validate_morpho(prey_spec, "Prey")) return 1;
+  if (num_predators > 0 && !validate_morpho(predator_spec, "Predator")) return 1;
+
+  // Apply morphology genomes to specs if present
+  auto apply_morpho = [&](BoidSpec& spec, const char* label) {
+    if (spec.morphology_genome.has_value() && spec.compound_eyes.has_value()
+        && sim.morphology.enabled) {
+      spec.compound_eyes = apply_morphology(
+          *spec.compound_eyes, *spec.morphology_genome, sim.morphology);
+      std::cerr << "Applied evolved morphology to " << label << " eye layout\n";
+    }
+  };
+  apply_morpho(prey_spec, "prey");
+  if (num_predators > 0) apply_morpho(predator_spec, "predator");
 
   std::mt19937 rng(42);
   std::uniform_real_distribution<float> pos_x(0, sim.world.width);

@@ -36,6 +36,7 @@ add_library(wildboids_sim
     src/simulation/spatial_grid.cpp
     src/simulation/sensory_system.cpp
     src/simulation/food_source.cpp
+    src/simulation/morphology_genome.cpp
     src/io/boid_spec.cpp
     src/io/sim_config.cpp
     src/brain/direct_wire_network.cpp
@@ -77,6 +78,7 @@ add_executable(wildboids_tests
     tests/test_sim_config.cpp
     tests/test_food_source.cpp
     tests/test_predation.cpp
+    tests/test_morphology.cpp
     tests/test_dual_evolution.cpp
     tests/test_shoaling.cpp
 )

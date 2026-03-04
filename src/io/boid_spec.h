@@ -2,6 +2,7 @@
 
 #include "simulation/vec2.h"
 #include "simulation/sensor.h"
+#include "simulation/morphology_genome.h"
 #include "simulation/boid.h"
 #include "brain/neat_genome.h"
 #include <string>
@@ -27,6 +28,7 @@ struct BoidSpec {
     std::vector<SensorSpec> sensors;                // legacy flat sensor list
     std::optional<CompoundEyeConfig> compound_eyes; // new compound-eye format
     std::optional<NeatGenome> genome; // optional — absent for boids without a brain
+    std::optional<MorphologyGenome> morphology_genome; // optional — evolved eye layout
 };
 
 // Returns total NEAT input count from whichever sensor format is present.

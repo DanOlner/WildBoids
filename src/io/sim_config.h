@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simulation/world.h"
+#include "simulation/morphology_genome.h"
 #include "brain/population.h"
 #include <string>
 
@@ -18,6 +19,9 @@ struct SimConfig {
     int generations = 100;
     int save_interval = 10;
     FitnessMode fitness_mode = FitnessMode::Gross;
+
+    // Morphology evolution (eye position/arc evolution)
+    MorphologyEvolutionConfig morphology;
 };
 
 // Load simulation config from a JSON file. Throws on parse/validation error.

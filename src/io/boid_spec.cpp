@@ -205,6 +205,25 @@ BoidSpec load_boid_spec(const std::string& path) {
         spec.genome = std::move(genome);
     }
 
+    // Morphology genome (optional — evolved eye layout)
+    if (j.contains("morphologyGenome")) {
+        MorphologyGenome morpho;
+        const auto& jm = j.at("morphologyGenome");
+
+        for (const auto& jg : jm.at("groups")) {
+            SensorGroupMorphology group;
+            for (float a : jg.at("angles")) {
+                group.angles.push_back(a);
+            }
+            for (float f : jg.at("arcFracs")) {
+                group.arc_fracs.push_back(f);
+            }
+            morpho.groups.push_back(std::move(group));
+        }
+
+        spec.morphology_genome = std::move(morpho);
+    }
+
     return spec;
 }
 
@@ -339,6 +358,18 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
         }
 
         j["genome"] = jg;
+    }
+
+    if (spec.morphology_genome.has_value()) {
+        json jm;
+        jm["groups"] = json::array();
+        for (const auto& group : spec.morphology_genome->groups) {
+            json jg;
+            jg["angles"] = group.angles;
+            jg["arcFracs"] = group.arc_fracs;
+            jm["groups"].push_back(jg);
+        }
+        j["morphologyGenome"] = jm;
     }
 
     std::ofstream file(path);

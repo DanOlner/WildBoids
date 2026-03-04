@@ -3,6 +3,7 @@
 #include "brain/population.h"
 #include "io/boid_spec.h"
 #include "io/sim_config.h"
+#include "simulation/morphology_genome.h"
 #include "simulation/world.h"
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +18,27 @@ struct GenerationResult {
     int predator_survivors = 0;
 };
 
+// Create a boid from spec, optionally applying individual morphology.
+static Boid create_boid_with_morphology(
+    const BoidSpec& spec,
+    const NeatGenome& genome,
+    const MorphologyGenome* morpho,
+    const MorphologyEvolutionConfig* morpho_config)
+{
+    if (morpho && morpho_config && spec.compound_eyes.has_value()) {
+        // Apply this individual's morphology to get custom eye positions
+        BoidSpec individual_spec = spec;
+        individual_spec.compound_eyes = apply_morphology(
+            *spec.compound_eyes, *morpho, *morpho_config);
+        Boid boid = create_boid_from_spec(individual_spec);
+        boid.brain = std::make_unique<NeatNetwork>(genome);
+        return boid;
+    }
+    Boid boid = create_boid_from_spec(spec);
+    boid.brain = std::make_unique<NeatNetwork>(genome);
+    return boid;
+}
+
 // Run one generation: create a World, spawn prey and predator boids with
 // genomes as brains, run for N ticks, return fitness for each genome.
 // Prey are spawned at indices [0, prey_count), predators at [prey_count, total).
@@ -28,7 +50,11 @@ static GenerationResult run_generation(
     const WorldConfig& config,
     int ticks,
     FitnessMode fitness_mode,
-    std::mt19937& rng)
+    std::mt19937& rng,
+    const std::vector<MorphologyGenome>* prey_morphologies = nullptr,
+    const MorphologyEvolutionConfig* prey_morpho_config = nullptr,
+    const std::vector<MorphologyGenome>* pred_morphologies = nullptr,
+    const MorphologyEvolutionConfig* pred_morpho_config = nullptr)
 {
     World world(config);
 
@@ -40,20 +66,22 @@ static GenerationResult run_generation(
     world.pre_seed_food(rng);
 
     // Spawn prey boids at indices [0, prey_count)
-    for (const auto& genome : prey_genomes) {
-        Boid boid = create_boid_from_spec(prey_spec);
+    for (int i = 0; i < static_cast<int>(prey_genomes.size()); ++i) {
+        const MorphologyGenome* morpho = (prey_morphologies && i < static_cast<int>(prey_morphologies->size()))
+            ? &(*prey_morphologies)[i] : nullptr;
+        Boid boid = create_boid_with_morphology(prey_spec, prey_genomes[i], morpho, prey_morpho_config);
         boid.body.position = Vec2{x_dist(rng), y_dist(rng)};
         boid.body.angle = angle_dist(rng);
-        boid.brain = std::make_unique<NeatNetwork>(genome);
         world.add_boid(std::move(boid));
     }
 
     // Spawn predator boids at indices [prey_count, prey_count + predator_count)
-    for (const auto& genome : predator_genomes) {
-        Boid boid = create_boid_from_spec(predator_spec);
+    for (int i = 0; i < static_cast<int>(predator_genomes.size()); ++i) {
+        const MorphologyGenome* morpho = (pred_morphologies && i < static_cast<int>(pred_morphologies->size()))
+            ? &(*pred_morphologies)[i] : nullptr;
+        Boid boid = create_boid_with_morphology(predator_spec, predator_genomes[i], morpho, pred_morpho_config);
         boid.body.position = Vec2{x_dist(rng), y_dist(rng)};
         boid.body.angle = angle_dist(rng);
-        boid.brain = std::make_unique<NeatNetwork>(genome);
         world.add_boid(std::move(boid));
     }
 
@@ -253,6 +281,27 @@ int main(int argc, char* argv[]) {
 
     Population prey_pop(prey_seed, sim.neat, rng);
 
+    // Validate morphology config matches boid spec eye counts
+    if (sim.morphology.enabled && prey_spec.compound_eyes.has_value()) {
+        std::string err = validate_morphology_config(*prey_spec.compound_eyes, sim.morphology);
+        if (!err.empty()) {
+            std::cerr << "Prey morphology config error: " << err << "\n";
+            return 1;
+        }
+    }
+
+    // Enable morphology evolution for prey if configured
+    if (sim.morphology.enabled) {
+        if (prey_spec.morphology_genome.has_value()) {
+            prey_pop.enable_morphology(sim.morphology, *prey_spec.morphology_genome);
+            std::cerr << "Prey morphology evolution enabled (seeded from champion)\n";
+        } else {
+            prey_pop.enable_morphology(sim.morphology);
+            std::cerr << "Prey morphology evolution enabled ("
+                      << sim.morphology.groups.size() << " groups)\n";
+        }
+    }
+
     // Load predator spec and create predator population (if co-evolution enabled)
     BoidSpec predator_spec;
     std::unique_ptr<Population> predator_pop;
@@ -285,6 +334,24 @@ int main(int argc, char* argv[]) {
             pred_seed = NeatGenome::minimal(pred_n_sensors, pred_n_thrusters, next_innov);
         }
         predator_pop = std::make_unique<Population>(pred_seed, predator_neat_params, rng);
+
+        // Validate morphology config matches predator spec eye counts
+        if (sim.morphology.enabled && predator_spec.compound_eyes.has_value()) {
+            std::string err = validate_morphology_config(*predator_spec.compound_eyes, sim.morphology);
+            if (!err.empty()) {
+                std::cerr << "Predator morphology config error: " << err << "\n";
+                return 1;
+            }
+        }
+
+        // Enable morphology evolution for predators if configured
+        if (sim.morphology.enabled) {
+            if (predator_spec.morphology_genome.has_value()) {
+                predator_pop->enable_morphology(sim.morphology, *predator_spec.morphology_genome);
+            } else {
+                predator_pop->enable_morphology(sim.morphology);
+            }
+        }
 
         std::cerr << "Co-evolution enabled: " << predator_neat_params.population_size
                   << " predators\n";
@@ -329,6 +396,10 @@ int main(int argc, char* argv[]) {
         // Empty predator genomes vector for prey-only mode
         static const std::vector<NeatGenome> no_predators;
 
+        // Prepare morphology pointers (null if morphology evolution disabled)
+        const MorphologyEvolutionConfig* morpho_cfg =
+            sim.morphology.enabled ? &sim.morphology : nullptr;
+
         auto result = run_generation(
             prey_pop.genomes(),
             coevolution ? predator_pop->genomes() : no_predators,
@@ -337,7 +408,11 @@ int main(int argc, char* argv[]) {
             sim.world,
             sim.ticks_per_generation,
             sim.fitness_mode,
-            rng);
+            rng,
+            prey_pop.has_morphology() ? &prey_pop.morphologies() : nullptr,
+            morpho_cfg,
+            (coevolution && predator_pop->has_morphology()) ? &predator_pop->morphologies() : nullptr,
+            morpho_cfg);
 
         // Evaluate prey fitness
         prey_pop.evaluate([&](int idx, const NeatGenome&) {
@@ -402,6 +477,9 @@ int main(int argc, char* argv[]) {
         if (interval_save || best_prey_save) {
             BoidSpec champion_spec = prey_spec;
             champion_spec.genome = prey_pop.best_genome();
+            if (prey_pop.has_morphology()) {
+                champion_spec.morphology_genome = prey_pop.best_morphology();
+            }
             std::string prefix = coevolution ? "champion_prey_gen" : "champion_gen";
             std::string path = output_dir + "/" + prefix + std::to_string(gen) + ".json";
             try {
@@ -419,6 +497,9 @@ int main(int argc, char* argv[]) {
             if (interval_save || best_pred_save) {
                 BoidSpec champion_spec = predator_spec;
                 champion_spec.genome = predator_pop->best_genome();
+                if (predator_pop->has_morphology()) {
+                    champion_spec.morphology_genome = predator_pop->best_morphology();
+                }
                 std::string path = predator_output_dir + "/champion_predator_gen"
                     + std::to_string(gen) + ".json";
                 try {

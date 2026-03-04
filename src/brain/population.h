@@ -3,9 +3,11 @@
 #include "brain/neat_genome.h"
 #include "brain/speciation.h"
 #include "brain/innovation_tracker.h"
+#include "simulation/morphology_genome.h"
 #include <vector>
 #include <functional>
 #include <random>
+#include <optional>
 
 struct PopulationParams {
     int population_size = 150;
@@ -46,6 +48,14 @@ public:
     Population(const NeatGenome& seed, const PopulationParams& params,
                std::mt19937& rng);
 
+    // Enable morphology evolution. Must be called before first advance_generation().
+    // Creates default morphologies for the initial population with mutation diversity.
+    void enable_morphology(const MorphologyEvolutionConfig& config);
+
+    // Enable morphology evolution, seeding from an existing morphology genome.
+    void enable_morphology(const MorphologyEvolutionConfig& config,
+                           const MorphologyGenome& seed);
+
     // Evaluate fitness of all genomes using the provided function.
     // The function receives a genome index and should return a fitness value.
     void evaluate(std::function<float(int genome_index, const NeatGenome& genome)> fitness_fn);
@@ -64,8 +74,15 @@ public:
     float fitness(int index) const { return fitness_[index]; }
     const NeatGenome& best_genome() const;
     float best_fitness() const;
+    int best_index() const;
 
     InnovationTracker& innovation_tracker() { return tracker_; }
+
+    // Morphology accessors
+    bool has_morphology() const { return morphology_config_.has_value(); }
+    const MorphologyGenome& morphology(int index) const { return morphologies_[index]; }
+    const std::vector<MorphologyGenome>& morphologies() const { return morphologies_; }
+    const MorphologyGenome& best_morphology() const { return morphologies_[best_index()]; }
 
 private:
     PopulationParams params_;
@@ -78,10 +95,16 @@ private:
     int generation_ = 0;
     int next_species_id_ = 1;
 
+    // Morphology evolution (optional)
+    std::optional<MorphologyEvolutionConfig> morphology_config_;
+    std::vector<MorphologyGenome> morphologies_;
+    MorphologyGenome pending_morphology_;  // temp storage for reproduce_from_species output
+
     // Select a parent from a species by tournament selection
     int tournament_select(const Species& species, int k = 2);
 
-    // Produce one offspring from a species
+    // Produce one offspring from a species. If morphology is enabled,
+    // also produces a child morphology using the same parent indices.
     NeatGenome reproduce_from_species(const Species& species);
 
     // Apply mutation to a genome

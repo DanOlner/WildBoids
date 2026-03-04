@@ -474,6 +474,84 @@ The only constraint is that eye counts and channel lists are fixed for the durat
 9. **Tests** — constraint satisfaction (arcs sum correctly), mutation bounds, crossover, round-trip serialisation
 10. **GUI** — apply morphology when loading champions (automatic if eye config is rebuilt)
 
+### Alternative: Uniform free-angle model for both groups
+
+It might be better to drop the 360° tiling constraint for short-range eyes entirely and use the same **free angles + arc budget** model for both sensor groups. The only difference between short-range and long-range would then be configuration (eye count, budget, max range) — identical code paths for both.
+
+**Why this might be preferable:**
+
+The tiling constraint (base rotation + contiguous arc placement) adds real code complexity — the derived-angle logic, the base rotation parameter, the contiguous placement loop — for an assumption that may not hold: that full 360° coverage is optimal. Letting evolution decide removes that assumption and opens up interesting possibilities:
+
+- **Overlapping forward sensors** — redundant coverage where it matters most, giving NEAT multiple slightly-offset readings of the same region for finer angular discrimination. Two narrow eyes at 5° and -5° provide stereo-like information that a single 10° eye can't.
+- **Deliberate blind spots** — if rear coverage genuinely isn't worth the "wiring cost" for a particular species/strategy, evolution should be free to abandon it. A prey boid that always flees forward might benefit from packing all sensors into the front hemisphere.
+- **Clustered sensor groups** — a tight cluster of narrow eyes forward for precise food alignment plus a few wider eyes at the sides for threat detection, with no coverage behind. The tiling model can't produce this because it forces contiguous arcs.
+- **Asymmetric layouts** — the tiling model produces symmetric-looking arrangements (evenly carved circle). Free placement allows genuinely asymmetric morphologies — more left coverage than right, for instance — which might emerge under specific environmental pressures.
+
+**What the genome simplifies to:**
+
+```cpp
+struct SensorGroupMorphology {
+    std::vector<float> angles;      // center angle per eye (radians), freely evolvable
+    std::vector<float> arc_fracs;   // fraction of budget per eye, normalised at phenotype extraction
+};
+
+struct MorphologyGenome {
+    SensorGroupMorphology short_range;
+    SensorGroupMorphology long_range;
+};
+```
+
+No `base_rotation` parameter. No contiguous placement logic. Both groups use the same `SensorGroupMorphology` struct and the same mutation/crossover code. The phenotype extraction becomes uniform:
+
+```cpp
+// Same logic for both groups — only budget and max_range differ
+for (int i = 0; i < group.eye_count; ++i) {
+    float arc = (morpho.arc_fracs[i] / total_frac) * budget;
+    eyes[i].arc_width = arc;
+    eyes[i].center_angle = morpho.angles[i];
+}
+```
+
+**Configuration would look like:**
+
+```json
+"morphology_evolution": {
+    "enabled": true,
+    "short_range": {
+        "eye_count": 16,
+        "total_arc_deg": 360,
+        "max_range": 100
+    },
+    "long_range": {
+        "eye_count": 4,
+        "total_arc_deg": 100,
+        "max_range": 300
+    }
+}
+```
+
+The short-range budget can still be 360° — that's the *maximum total arc* available to distribute, not a guarantee of full coverage. Evolution might use all 360° spread around the circle (converging to something tiling-like), or it might cluster 360° worth of arc into forward-facing overlapping sensors. Either outcome is a legitimate evolutionary discovery.
+
+**Trade-off vs the tiling model:** The tiling model guarantees no blind spots, which might speed up early evolution (boids can always detect threats from any direction). The free model starts with the default uniform layout (same as tiling) but allows drift toward blind spots if mutation pushes eyes away from rear coverage before NEAT has learned to use those sensors. In practice this is unlikely to be a problem — the initial population starts with uniform coverage, and selection pressure from predators will maintain rear coverage if it's valuable.
+
+**Recommendation:** The free-angle model is simpler code, more uniform (one struct, one code path for both groups), and more evolutionarily interesting. The tiling model's guarantee of full coverage is a designer assumption about what's optimal — exactly the kind of thing we're building an evolution system to discover. Start with the free model; if blind-spot problems emerge in experiments, a soft penalty on uncovered angular range is easier to add than removing the tiling constraint would be to remove.
+
+**Extensibility — adding more sensor tiers:** Because `SensorGroupMorphology` is completely generic (just angles + arc fractions + a budget), adding additional sensor groups requires no evolution code changes — just another entry in the config. The config could naturally become a list of groups:
+
+```json
+"morphology_evolution": {
+    "groups": [
+        { "name": "short_range", "eye_count": 16, "total_arc_deg": 360, "max_range": 100 },
+        { "name": "long_range",  "eye_count": 4,  "total_arc_deg": 100, "max_range": 300 },
+        { "name": "ultra_long",  "eye_count": 2,  "total_arc_deg": 40,  "max_range": 800 }
+    ]
+}
+```
+
+A mid-range tier, an ultra-long tier for distant threat awareness, a narrow rear-only group — all use the same mutation, crossover, and phenotype extraction code. NEAT input count becomes `sum(all eye counts) × channels + proprioceptive`. This also connects naturally to the biological multi-scale sensing ideas earlier in this doc: the compound-eye groups handle spatial/directional detection at various ranges, while senses like vibration fields or thrust-detection could sit alongside them as standalone scalar inputs outside the group system.
+
+---
+
 ### Risks and mitigations
 
 **Risk: Brain-body mismatch after crossover.** A brain evolved for forward-clustered eyes gets paired with rear-clustered eyes from the other parent. **Mitigation:** This is actually fine — it's equivalent to the "damage" that NEAT crossover already causes by mixing connection weights. Selection pressure quickly eliminates unfit brain-body combinations. The per-eye crossover (rather than wholesale genome swap) limits the disruption.
@@ -481,5 +559,33 @@ The only constraint is that eye counts and channel lists are fixed for the durat
 **Risk: Degenerate morphologies.** Evolution pushes all arc budget into one eye, leaving others at minimum width. **Mitigation:** The minimum arc fraction clamp prevents true degeneracy. And if a single wide eye outperforms many narrow ones, that's a legitimate evolutionary discovery — the constraint system allows it within bounds.
 
 **Risk: Slow convergence with two genomes.** More things to search over = slower evolution. **Mitigation:** The morphology genome is tiny (tens of floats vs thousands of NEAT parameters). Its search space is small and smooth (continuous angles, no topology). Morphology should converge quickly relative to NEAT. Starting with small mutation sigma means early generations focus on brain evolution with near-default morphology, then morphology refines as brains stabilise.
+
+### Relationship to NEAT parameters
+
+Some NEAT parameters are **inherently shared** with morphology evolution because they operate at the population level — brain and body are selected as a unit, so `crossoverProb`, `survivalRate`, `elitism`, and `maxStagnation` apply to both genomes automatically via the same parent selection and survival decisions.
+
+However, morphology evolution should have its **own separate mutation parameters** rather than reusing NEAT's. The domains are too different for shared values to make sense:
+
+- NEAT's `weightSigma` (0.5) is calibrated for connection weights in [-2, 2]. Applied to angles in radians, 0.5 ≈ 29° — far too aggressive for eye position mutation.
+- NEAT's structural mutation (`addNodeProb`, `addConnectionProb`) has no morphology analogue — the morphology genome is fixed-length.
+- NEAT's `compatThreshold` drives speciation, which morphology doesn't contribute to.
+
+The only params morphology needs are its own mutation rates and sigmas. These live in a separate config block:
+
+```json
+"morphologyEvolution": {
+    "enabled": true,
+    "groups": [ ... ],
+    "mutation": {
+        "angleSigmaDeg": 5.0,
+        "arcFracSigma": 0.1,
+        "angleMutateProb": 0.8,
+        "arcMutateProb": 0.8,
+        "replaceProb": 0.05
+    }
+}
+```
+
+This keeps morphology evolution self-contained and independently tunable without conflating it with NEAT's very different parameter space.
 
 ---

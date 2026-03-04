@@ -33,6 +33,36 @@ Population::Population(const NeatGenome& seed, const PopulationParams& params,
                    next_species_id_);
 }
 
+void Population::enable_morphology(const MorphologyEvolutionConfig& config) {
+    morphology_config_ = config;
+    auto default_morpho = create_default_morphology(config);
+
+    morphologies_.clear();
+    morphologies_.reserve(params_.population_size);
+    for (int i = 0; i < params_.population_size; ++i) {
+        MorphologyGenome m = default_morpho;
+        if (i > 0) {
+            mutate_morphology(m, config, rng_);
+        }
+        morphologies_.push_back(std::move(m));
+    }
+}
+
+void Population::enable_morphology(const MorphologyEvolutionConfig& config,
+                                   const MorphologyGenome& seed) {
+    morphology_config_ = config;
+
+    morphologies_.clear();
+    morphologies_.reserve(params_.population_size);
+    for (int i = 0; i < params_.population_size; ++i) {
+        MorphologyGenome m = seed;
+        if (i > 0) {
+            mutate_morphology(m, config, rng_);
+        }
+        morphologies_.push_back(std::move(m));
+    }
+}
+
 void Population::evaluate(
     std::function<float(int genome_index, const NeatGenome& genome)> fitness_fn) {
     for (int i = 0; i < static_cast<int>(genomes_.size()); ++i) {
@@ -72,32 +102,50 @@ NeatGenome Population::reproduce_from_species(const Species& species) {
     std::uniform_real_distribution<float> coin(0.0f, 1.0f);
 
     NeatGenome child;
+    int p1_idx = -1, p2_idx = -1;
 
     if (species.members.size() == 1 || coin(rng_) >= params_.crossover_prob) {
         // Asexual: clone and mutate
-        int parent = tournament_select(species);
-        child = genomes_[parent];
+        p1_idx = tournament_select(species);
+        child = genomes_[p1_idx];
     } else {
         // Sexual: crossover two parents
-        int p1 = tournament_select(species);
-        int p2 = tournament_select(species);
+        p1_idx = tournament_select(species);
+        p2_idx = tournament_select(species);
         // Ensure different parents when possible
         if (species.members.size() > 1) {
             int attempts = 0;
-            while (p2 == p1 && attempts < 5) {
-                p2 = tournament_select(species);
+            while (p2_idx == p1_idx && attempts < 5) {
+                p2_idx = tournament_select(species);
                 ++attempts;
             }
         }
         // Fitter parent goes first
-        if (fitness_[p1] >= fitness_[p2]) {
-            child = crossover(genomes_[p1], genomes_[p2], rng_);
+        if (fitness_[p1_idx] >= fitness_[p2_idx]) {
+            child = crossover(genomes_[p1_idx], genomes_[p2_idx], rng_);
         } else {
-            child = crossover(genomes_[p2], genomes_[p1], rng_);
+            child = crossover(genomes_[p2_idx], genomes_[p1_idx], rng_);
+            std::swap(p1_idx, p2_idx);  // p1 is now the fitter parent
         }
     }
 
     mutate(child);
+
+    // Morphology: use same parent selection for body genome
+    if (morphology_config_.has_value()) {
+        MorphologyGenome child_morpho;
+        if (p2_idx >= 0) {
+            // Sexual: crossover morphology with same parent order
+            child_morpho = crossover_morphology(
+                morphologies_[p1_idx], morphologies_[p2_idx], rng_);
+        } else {
+            // Asexual: clone
+            child_morpho = morphologies_[p1_idx];
+        }
+        mutate_morphology(child_morpho, *morphology_config_, rng_);
+        pending_morphology_ = std::move(child_morpho);
+    }
+
     return child;
 }
 
@@ -205,6 +253,10 @@ void Population::advance_generation() {
     // Produce next generation
     std::vector<NeatGenome> new_genomes;
     new_genomes.reserve(params_.population_size);
+    std::vector<MorphologyGenome> new_morphologies;
+    if (has_morphology()) {
+        new_morphologies.reserve(params_.population_size);
+    }
 
     for (size_t si = 0; si < species_.size(); ++si) {
         auto& s = species_[si];
@@ -215,6 +267,9 @@ void Population::advance_generation() {
         elites = std::min(elites, count);
         for (int e = 0; e < elites; ++e) {
             new_genomes.push_back(genomes_[s.members[e]]);
+            if (has_morphology()) {
+                new_morphologies.push_back(morphologies_[s.members[e]]);
+            }
         }
 
         // Trim species to survival_rate for breeding pool
@@ -226,6 +281,9 @@ void Population::advance_generation() {
         // Fill remaining slots with offspring
         for (int i = elites; i < count; ++i) {
             new_genomes.push_back(reproduce_from_species(s));
+            if (has_morphology()) {
+                new_morphologies.push_back(std::move(pending_morphology_));
+            }
         }
 
         // Restore full member list (needed for species representative selection)
@@ -235,6 +293,9 @@ void Population::advance_generation() {
     // Replace population
     genomes_ = std::move(new_genomes);
     fitness_.assign(genomes_.size(), 0.0f);
+    if (has_morphology()) {
+        morphologies_ = std::move(new_morphologies);
+    }
 
     // New generation for innovation tracker
     tracker_.new_generation();
@@ -245,9 +306,13 @@ void Population::advance_generation() {
                    next_species_id_);
 }
 
-const NeatGenome& Population::best_genome() const {
+int Population::best_index() const {
     auto it = std::max_element(fitness_.begin(), fitness_.end());
-    return genomes_[std::distance(fitness_.begin(), it)];
+    return static_cast<int>(std::distance(fitness_.begin(), it));
+}
+
+const NeatGenome& Population::best_genome() const {
+    return genomes_[best_index()];
 }
 
 float Population::best_fitness() const {
