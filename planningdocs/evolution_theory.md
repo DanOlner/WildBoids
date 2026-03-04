@@ -796,3 +796,36 @@ These aren't proposals yet, just starting thoughts on what might address some of
 - **Relative fitness**: rank boids against cohort rather than using absolute energy — handles the zero-sum problem.
 - **Time-discounted fitness**: weight early energy gain less than late energy gain (or vice versa) to shape what temporal strategies are favoured.
 - **Separate survival and foraging components**: explicitly multi-objective fitness, e.g. `α × energy_rate + β × survival_time`.
+
+---
+
+## Part 5: Brain-Body Co-Evolution and Developmental Constraint
+
+### The Problem
+
+When evolving both neural network weights (brain) and sensor morphology (body) simultaneously, a fundamental tension emerges: **the brain adapts to a particular sensor layout, which then makes that layout resistant to change**. Any mutation that moves an eye to a better position will initially *reduce* fitness because the brain's weights are tuned to the old layout. The brain must re-adapt before the morphological improvement can be evaluated fairly.
+
+In biology, this phenomenon is called **developmental constraint** or **phylogenetic inertia** — the idea that evolutionary history constrains future adaptation. Organisms get "locked in" to body plans that may not be globally optimal but are locally stable because the rest of the organism has co-adapted around them.
+
+### Observed in Wild Boids
+
+In co-evolution runs with morphology evolution enabled, we observed:
+- **Predator eye angles settle into local optima early and stop moving.** The timeline plots show angles converging within the first ~20 generations and then remaining essentially fixed for the remaining 80+ generations, even though mutation is still active.
+- **Prey short-range eyes converge to forward-facing.** This makes ecological sense for food-finding but may not be globally optimal when predator pressure is significant (real prey often evolve wide-field vision for predator detection).
+- **Arc widths show more ongoing variation than angles**, likely because small arc width changes are less disruptive to brain function than repositioning an entire eye.
+
+### Why It Happens
+
+The coupling is asymmetric:
+1. **Brain → Body dependence**: NEAT weights encode specific input-output mappings. Moving eye #3 from 45° to 90° effectively scrambles the meaning of that input channel. The brain must completely re-learn what that channel means.
+2. **Body → Brain dependence**: A brain evolved for forward-focused vision will produce thrust patterns that only work when food is detected in the forward arc. Moving eyes backward doesn't help if the brain doesn't know to turn toward backward-detected food.
+
+This creates a **co-adaptation trap**: brain and body reach a mutually consistent but potentially suboptimal configuration, and neither can improve without the other changing first.
+
+### Possible Mitigations
+
+- **Periodic morphology resets**: Every N generations, randomize morphology while keeping brain weights — forces the brain to be robust to sensor layout changes.
+- **Increased morphology mutation on stagnation**: If fitness plateaus, boost `angleSigmaDeg` and `arcFracSigma` to shake the morphology out of local optima.
+- **Morphology-aware speciation**: Use morphology distance (not just brain topology) in the NEAT compatibility function, so populations with different body plans are protected from competing directly.
+- **Staged evolution**: Evolve morphology first (with simple reactive brains), freeze it, then evolve NEAT brains for the fixed layout. Avoids the co-adaptation problem entirely but loses the potential for synergistic brain-body solutions.
+- **Lamarckian morphology**: After brain evolution converges, analytically determine which eye positions would be most useful given current brain weights, and nudge morphology toward those positions.

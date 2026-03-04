@@ -10,6 +10,7 @@ Checks that:
 Usage:
     python scripts/validate_morphology_evolution.py data/champions/champion_gen*.json
     python scripts/validate_morphology_evolution.py --config data/sim_config.json data/champions/*.json
+    python scripts/validate_morphology_evolution.py --config data/sim_config.json --plot data/champions/*.json
 """
 
 import json
@@ -183,11 +184,172 @@ def print_summary(results: list[dict], config_groups: list[dict] | None):
         print()
 
 
+def plot_morphology_evolution(results: list[dict], config_groups: list[dict] | None,
+                              output_path: str | None = None):
+    """Generate polar plots showing how eye layouts evolved across generations.
+
+    Produces a figure with rows = generations (sampled), columns = sensor groups.
+    Each subplot is a polar plot showing eye positions as wedges.
+    Also produces a timeline plot showing how angles and arc widths changed.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        from matplotlib.patches import Wedge
+        import numpy as np
+    except ImportError:
+        print('matplotlib/numpy not installed — skipping plot. pip install matplotlib numpy')
+        return
+
+    morpho_results = [r for r in results if r['has_morphology']]
+    if len(morpho_results) < 2:
+        print('Not enough champions with morphology to plot.')
+        return
+
+    n_groups = len(morpho_results[0]['groups'])
+
+    # --- Figure 1: Polar wedge plots showing eye layout at key generations ---
+    # Sample up to 6 generations evenly
+    n_samples = min(6, len(morpho_results))
+    indices = np.linspace(0, len(morpho_results) - 1, n_samples, dtype=int)
+    sampled = [morpho_results[i] for i in indices]
+
+    fig1, axes1 = plt.subplots(n_samples, n_groups, figsize=(5 * n_groups, 3.5 * n_samples),
+                                subplot_kw={'projection': 'polar'})
+    if n_groups == 1:
+        axes1 = axes1.reshape(-1, 1)
+    if n_samples == 1:
+        axes1 = axes1.reshape(1, -1)
+
+    # Colour map for eyes
+    cmap = plt.cm.tab20
+
+    for row, r in enumerate(sampled):
+        for gi, g in enumerate(r['groups']):
+            ax = axes1[row, gi]
+            angles = g['angles']
+            fracs = g['arc_fracs']
+
+            # Compute arc widths in radians
+            budget_rad = 2 * math.pi  # default
+            if config_groups and gi < len(config_groups):
+                budget_rad = config_groups[gi].get('totalArcDeg', 360) * math.pi / 180
+
+            total_frac = sum(fracs) if fracs else 1
+            if total_frac <= 0:
+                total_frac = 1
+
+            for i, (angle, frac) in enumerate(zip(angles, fracs)):
+                arc_width = (frac / total_frac) * budget_rad
+                half_arc = arc_width / 2
+
+                # Draw wedge as a filled region
+                theta = np.linspace(angle - half_arc, angle + half_arc, 30)
+                r_vals = np.ones_like(theta)
+                color = cmap(i % 20)
+
+                ax.fill_between(theta, 0, r_vals, alpha=0.5, color=color)
+                ax.plot([angle, angle], [0, 1.05], color=color, linewidth=1.5, alpha=0.8)
+
+            # Forward direction marker
+            ax.annotate('FWD', xy=(math.pi / 2, 1.15), ha='center', va='center',
+                        fontsize=7, fontweight='bold', color='red',
+                        annotation_clip=False)
+            ax.plot([math.pi / 2], [1.1], 'rv', markersize=6, clip_on=False)
+
+            ax.set_ylim(0, 1.2)
+            ax.set_yticks([])
+            # Polar plots: 0 is right, pi/2 is up. Our convention: +Y is forward = pi/2
+            ax.set_theta_offset(math.pi / 2)  # 0 rad points up
+            ax.set_theta_direction(-1)  # clockwise for +X = right
+
+            group_label = ['Short-range', 'Long-range'][gi] if gi < 2 else f'Group {gi}'
+            budget_label = ''
+            if config_groups and gi < len(config_groups):
+                budget_label = f' ({config_groups[gi]["totalArcDeg"]}°)'
+            if row == 0:
+                ax.set_title(f'{group_label}{budget_label}', fontsize=11, fontweight='bold', pad=20)
+            ax.text(-0.15, 0.5, f'Gen {r["gen"]}', transform=ax.transAxes,
+                    fontsize=10, fontweight='bold', va='center', rotation=90)
+
+    fig1.suptitle('Eye Layout Evolution (polar view, FWD = up)', fontsize=14, fontweight='bold', y=1.01)
+    fig1.tight_layout()
+
+    polar_path = output_path or 'morphology_evolution.png'
+    fig1.savefig(polar_path, dpi=150, bbox_inches='tight')
+    print(f'Saved polar layout plot: {polar_path}')
+
+    # --- Figure 2: Timeline plots ---
+    fig2, axes2 = plt.subplots(2, n_groups, figsize=(6 * n_groups, 8), squeeze=False)
+
+    gens = [r['gen'] for r in morpho_results]
+
+    for gi in range(n_groups):
+        n_eyes = morpho_results[0]['groups'][gi]['eye_count']
+
+        # Angle timeline
+        ax_angle = axes2[0, gi]
+        for eye_i in range(n_eyes):
+            eye_angles = [math.degrees(r['groups'][gi]['angles'][eye_i]) for r in morpho_results]
+            ax_angle.plot(gens, eye_angles, linewidth=1, alpha=0.7, color=cmap(eye_i % 20),
+                          label=f'Eye {eye_i}' if n_eyes <= 8 else None)
+
+        group_label = ['Short-range', 'Long-range'][gi] if gi < 2 else f'Group {gi}'
+        ax_angle.set_title(f'{group_label} — Eye Angles', fontweight='bold')
+        ax_angle.set_ylabel('Angle (degrees)')
+        ax_angle.set_xlabel('Generation')
+        ax_angle.axhline(0, color='gray', linewidth=0.5, linestyle='--')
+        ax_angle.axhline(90, color='red', linewidth=0.5, linestyle=':', alpha=0.5, label='Forward (90°)')
+        if n_eyes <= 8:
+            ax_angle.legend(fontsize=7, ncol=2)
+
+        # Arc width timeline
+        ax_arc = axes2[1, gi]
+        budget_deg = 360
+        if config_groups and gi < len(config_groups):
+            budget_deg = config_groups[gi].get('totalArcDeg', 360)
+
+        for eye_i in range(n_eyes):
+            eye_arcs = []
+            for r in morpho_results:
+                fracs = r['groups'][gi]['arc_fracs']
+                total_frac = sum(fracs)
+                if total_frac > 0:
+                    eye_arcs.append((fracs[eye_i] / total_frac) * budget_deg)
+                else:
+                    eye_arcs.append(0)
+            ax_arc.plot(gens, eye_arcs, linewidth=1, alpha=0.7, color=cmap(eye_i % 20),
+                        label=f'Eye {eye_i}' if n_eyes <= 8 else None)
+
+        equal_share = budget_deg / n_eyes
+        ax_arc.axhline(equal_share, color='gray', linewidth=1, linestyle='--',
+                        label=f'Equal share ({equal_share:.1f}°)')
+        ax_arc.set_title(f'{group_label} — Arc Widths ({budget_deg}° budget)', fontweight='bold')
+        ax_arc.set_ylabel('Arc width (degrees)')
+        ax_arc.set_xlabel('Generation')
+        if n_eyes <= 8:
+            ax_arc.legend(fontsize=7, ncol=2)
+
+    fig2.suptitle('Morphology Evolution Over Time', fontsize=14, fontweight='bold')
+    fig2.tight_layout()
+
+    timeline_path = polar_path.replace('.png', '_timeline.png')
+    fig2.savefig(timeline_path, dpi=150, bbox_inches='tight')
+    print(f'Saved timeline plot: {timeline_path}')
+
+    plt.close('all')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Validate morphology evolution in champion files')
     parser.add_argument('files', nargs='+', help='Champion JSON files')
     parser.add_argument('--config', default=None, help='sim_config.json path (for budget validation)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show per-eye details')
+    parser.add_argument('--plot', '-p', nargs='?', const='morphology_evolution.png',
+                        default=None, metavar='PATH',
+                        help='Generate plots (default: morphology_evolution.png)')
     args = parser.parse_args()
 
     config_groups = None
@@ -232,6 +394,9 @@ def main():
                     if 'arc_widths_deg' in g:
                         arc_w = f'  arc={g["arc_widths_deg"][i]:.2f}°'
                     print(f'    Eye {i:2d}: angle={math.degrees(a):7.2f}°  frac={f:.4f}{arc_w}')
+
+    if args.plot is not None:
+        plot_morphology_evolution(results, config_groups, args.plot)
 
     if has_errors:
         print('\nVALIDATION FAILED — see errors above')

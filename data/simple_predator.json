@@ -4,7 +4,7 @@
     "mass": 1.0,
     "momentOfInertia": 0.5,
     "initialEnergy": 100.0,
-    "metabolismRate": 0.5,
+    "metabolismRate": 0.2,
     "thrusters": [
         {
             "id": 0,
