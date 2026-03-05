@@ -161,6 +161,7 @@ BoidSpec load_boid_spec(const std::string& path) {
         cfg.has_angular_velocity_sensor = jce.value("angularVelocitySensor", false);
         cfg.has_noise_sensor = jce.value("noiseSensor", false);
         cfg.has_shoaling_sensor = jce.value("shoalingSensor", false);
+        cfg.has_hunger_sensor = jce.value("hungerSensor", false);
         spec.compound_eyes = std::move(cfg);
     }
     // Legacy sensors — old specs without compound eyes still load fine
@@ -318,6 +319,7 @@ void save_boid_spec(const BoidSpec& spec, const std::string& path) {
         jce["angularVelocitySensor"] = spec.compound_eyes->has_angular_velocity_sensor;
         jce["noiseSensor"] = spec.compound_eyes->has_noise_sensor;
         jce["shoalingSensor"] = spec.compound_eyes->has_shoaling_sensor;
+        jce["hungerSensor"] = spec.compound_eyes->has_hunger_sensor;
         j["compoundEyes"] = jce;
     } else if (!spec.sensors.empty()) {
         j["sensors"] = json::array();

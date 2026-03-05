@@ -35,6 +35,7 @@ struct CompoundEyeConfig {
     bool has_angular_velocity_sensor = false;
     bool has_noise_sensor = false;
     bool has_shoaling_sensor = false;
+    bool has_hunger_sensor = false;
 
     int short_range_eye_count() const { return static_cast<int>(eyes.size()); }
     int long_range_eye_count() const { return static_cast<int>(long_range_eyes.size()); }
@@ -44,7 +45,8 @@ struct CompoundEyeConfig {
                + (has_speed_sensor ? 1 : 0)
                + (has_angular_velocity_sensor ? 1 : 0)
                + (has_noise_sensor ? 1 : 0)
-               + (has_shoaling_sensor ? 1 : 0);
+               + (has_shoaling_sensor ? 1 : 0)
+               + (has_hunger_sensor ? 1 : 0);
     }
 };
 

@@ -829,3 +829,56 @@ This creates a **co-adaptation trap**: brain and body reach a mutually consisten
 - **Morphology-aware speciation**: Use morphology distance (not just brain topology) in the NEAT compatibility function, so populations with different body plans are protected from competing directly.
 - **Staged evolution**: Evolve morphology first (with simple reactive brains), freeze it, then evolve NEAT brains for the fixed layout. Avoids the co-adaptation problem entirely but loses the potential for synergistic brain-body solutions.
 - **Lamarckian morphology**: After brain evolution converges, analytically determine which eye positions would be most useful given current brain weights, and nudge morphology toward those positions.
+
+---
+
+## Part 6: The Pass-Through Problem — Making Groups Defensible Without Collision Physics
+
+### The Problem
+
+The evolutionary theory (Part 3) identifies predator avoidance as the primary driver of flocking: the selfish herd, dilution effect, confusion effect, and many-eyes hypothesis all depend on groups being harder for predators to exploit than isolated individuals. But in Wild Boids, boids are dimensionless points that pass through each other freely. A predator can sail straight through a dense group and eat interior individuals just as easily as edge ones. This undermines the core selection pressure that should drive grouping to evolve.
+
+Full rigid-body collision is unappealing: it would introduce instabilities, require careful tuning of restitution/friction parameters, fundamentally change the movement dynamics that NEAT brains have adapted to, and add significant computational cost per tick. The question is whether lighter-weight mechanisms can recreate the key ecological result — **groups are harder to eat from than isolated individuals** — without simulating physical bodies.
+
+### What Already Helps: Nearest-Only Sensors as Occlusion Proxy
+
+The current sensor system (`NearestDistance` signal type) already provides a partial solution on the **detection** side. Each predator sensor cone reports only the nearest prey within it. Prey deeper inside a group are invisible to that sensor — the nearest prey effectively occludes them. This means predators naturally detect and target edge individuals first, which is the correct ecological dynamic for the selfish herd.
+
+The gap is on the **catch** side: once a predator reaches `catch_radius` of any prey, that prey dies instantly regardless of how many other prey surround it. Detection favors edges; killing doesn't care.
+
+### Proposed Mechanism: Confusion Effect on Catch
+
+The confusion effect is well-documented in real predator-prey systems (Part 3): predator attack success decreases with increasing local prey density because many moving targets create sensory overload, making it harder to single out and track an individual.
+
+**Implementation idea:** When a predator is within `catch_radius` of a prey, count the number of other prey within some "confusion radius" (larger than catch_radius). As that count increases, the probability of a successful catch decreases.
+
+Possible formulations:
+- **Inverse scaling**: `catch_prob = 1.0 / (1 + α * nearby_prey_count)` — simple, always positive, asymptotically approaches zero
+- **Threshold**: catch probability = 1.0 if ≤ N nearby prey, drops to some lower value above N — simpler but less smooth
+- **Cooldown**: after a successful catch, the predator can't catch again for K ticks — prevents "mowing through" a group but doesn't directly reward density
+
+The confusion radius and scaling factor become tunable parameters (configurable in `sim_config.json`). Too strong and predators can never eat in groups, removing selection pressure entirely. Too weak and it doesn't matter. The goal is a regime where isolated prey are easy to catch but dense groups provide meaningful (not absolute) protection.
+
+**What this buys evolutionarily:**
+- Prey that aggregate gain a real survival advantage (not just sensor-level detection avoidance)
+- Predators face selection pressure to isolate individuals from groups rather than charging through — could drive evolution of flanking or herding strategies
+- The dilution effect emerges naturally: more prey nearby = lower per-capita catch probability
+- Edge prey are still more vulnerable (predators detect them first via nearest-only sensors, and they have fewer neighbors on the outward side contributing to the confusion count)
+
+### What About Physical Barriers?
+
+Even without collision, there are softer options that create some resistance to penetration:
+
+- **Increased drag in dense regions**: predators (or all boids) experience higher effective drag when many boids are nearby — slows them down in groups, giving prey more time to scatter. Biologically analogous to the hydrodynamic interference of swimming through a dense school.
+- **Short-range repulsion force**: not full collision, but a velocity-dependent push that makes it energetically expensive to maintain high speed through a crowd. Could be asymmetric — predators experience it more than prey, since prey are co-moving while predators are cutting across the flow.
+
+These are more complex to implement and tune than the confusion effect, and risk distorting the physics in ways that interact badly with evolved NEAT behaviors. The confusion effect on catch probability is probably the cleanest first step — it operates at the ecological level (catch success) rather than the physics level (forces), so it doesn't disrupt movement dynamics.
+
+### Interaction with Other Selection Pressures
+
+The confusion effect would complement existing pressures:
+- **Energy savings from grouping** (if metabolic cost of movement is modeled) — already somewhat present via thrust costs
+- **Information sharing** — prey near other prey that have found food could follow them (if they evolve to do so)
+- **Many-eyes** — more prey nearby means more sensor coverage of predator approaches (already partially captured by the sensor system)
+
+The risk is over-engineering: if the confusion effect is too strong, prey just clump into a single ball and predators starve, collapsing the co-evolutionary dynamic. The parameter should be set conservatively at first and adjusted based on whether grouping behaviors actually emerge and whether predators can still exert meaningful selection pressure.

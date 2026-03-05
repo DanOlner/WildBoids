@@ -277,5 +277,13 @@ void SensorySystem::perceive_compound(const std::vector<Boid>& boids,
                       ? (1.0f - self.effective_linear_drag / base_drag)
                       : 0.0f;
         outputs[proprio_idx] = std::clamp(bonus, 0.0f, 1.0f);
+        proprio_idx++;
+    }
+    if (cfg.has_hunger_sensor) {
+        float hunger = (self.initial_energy > 0.0f)
+            ? 1.0f - std::clamp(self.energy / self.initial_energy, 0.0f, 1.0f)
+            : 0.0f;
+        outputs[proprio_idx] = hunger;
+        proprio_idx++;
     }
 }

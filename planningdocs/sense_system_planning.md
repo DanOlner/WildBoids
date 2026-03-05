@@ -589,3 +589,41 @@ The only params morphology needs are its own mutation rates and sigmas. These li
 This keeps morphology evolution self-contained and independently tunable without conflating it with NEAT's very different parameter space.
 
 ---
+
+
+
+# PROPRIOCEPTION / INTERNAL BOID INPUTS
+
+### The "no input" problem — exploration behavior
+
+**The problem it solves:** When sensors detect nothing, all inputs are 0. The network outputs sigmoid(sum_of_biases), producing a fixed thruster pattern. Boids with no nearby food or boids move in a fixed arc (or sit still) rather than exploring.
+
+Several approaches, not mutually exclusive:
+
+**C1: Bias input node.** Add a constant-1.0 input to the sensor array (a "bias sensor" that always fires). This is standard in NEAT — it gives the network a constant signal to work with, so output biases effectively become tunable even when all real sensors read zero. The minimal genome starts with connections from this bias node to all outputs. Evolution can tune these to produce a useful "default behavior" (e.g., gentle forward cruise with slight random drift).
+
+**C2: Proprioception — internal state sensors.** This is broader than just "what to do when nothing's nearby." Proprioception gives boids awareness of their own body state — the biological equivalent of knowing where your limbs are, how fast you're moving, whether you're hungry. These signals are always available regardless of what's happening externally, which makes them useful for the dead-zone problem, but their value goes well beyond that. They create a richer input space for the brain to work with, enabling conditional strategies that depend on the boid's own state.
+
+Candidate proprioceptive sensors:
+
+- **Speed** (0–1, normalised by terminal velocity). The most immediately useful. A stationary boid knows it's stationary; a fast-moving boid can learn to brake before overshooting food. Also enables "cruise control" — evolution can discover a preferred speed and correct deviations. Currently boids have no idea how fast they're going; their thrust decisions are purely reactive to external stimuli.
+
+- **Angular velocity** (-1 to 1, normalised). Tells the boid whether it's spinning. Could enable "if I'm spinning fast, stop steering" — anti-oscillation behavior. Also useful for smooth pursuit: a boid tracking food can sense its own turn rate and modulate steering to avoid overshooting. Complements speed — together they give a full picture of current motion state.
+
+- **Heading change** (-1 to 1). How much the boid's heading changed since last tick. Subtly different from angular velocity — it's the *result* of angular velocity after drag, not the raw rate. Could be redundant with angular velocity, or could provide a cleaner signal for "am I currently turning?"
+
+- **Energy level** (0–1, fraction of initial energy). Lets evolution discover energy-dependent strategies: "when energy is high, explore aggressively; when low, conserve" — or the reverse ("when low, take bigger risks to find food before dying"). This is hunger as a proprioceptive signal. With neural complexity cost (Option A), this becomes even more interesting — a boid with a costly brain needs to find food more urgently than a lean one, and can know this.
+
+- **Thruster feedback** (0–1 per thruster, or a single aggregate). What am I currently doing with my thrusters? This sounds circular — the brain sets the thrusters, why does it need to know what it set? — but with the one-tick delay in the pipeline, the brain doesn't actually know its own previous output. Thruster feedback closes that loop. It's also the prerequisite for any kind of motor learning: you can't learn "that thrust pattern worked" without knowing what the pattern was. For a minimal version, a single "total thrust" signal (sum of all thruster powers / max possible thrust) might suffice.
+
+- **Time alive** (0–1, fraction of generation length). Gives a sense of urgency — "the generation is nearly over, I should be more aggressive." In biology this would be something like circadian rhythm or seasonal awareness. Probably low priority but conceptually interesting.
+
+**Impact beyond the dead-zone problem:** Proprioception fundamentally changes what the brain can learn. Without it, the network maps `external world state → thrust commands` — a pure stimulus-response system. With it, the mapping becomes `(external state, internal state) → thrust commands` — the boid can condition its behavior on what it's currently doing. This is the difference between a thermostat (reacts to temperature) and a driver (reacts to the road *and* their own speed/steering). Some specific behaviors proprioception enables:
+
+- **Smooth pursuit**: Detect food ahead + detect own speed → modulate rear thrust to approach at controlled speed rather than slamming into food at full thrust then overshooting
+- **Exploration spirals**: No external input + detect low speed → thrust forward; no external input + detect high angular velocity → reduce steering. This produces a natural expanding spiral search pattern
+- **Energy triage**: Low energy + no food detected → reduce thrust to extend life; low energy + food detected → full thrust (worth the metabolic gamble)
+- **Oscillation damping**: High angular velocity + food signal switching sides → reduce steering gain. This directly addresses the "wiggle" behavior seen in some evolved champions that detect food but can't steer smoothly toward it
+
+**Recommendation:** Start with **speed** and **energy level** — these are the most immediately useful and easiest to implement (both are O(1) reads of existing boid state). Angular velocity is a strong third. Thruster feedback is interesting but adds 1–4 more inputs, which increases the genome size; defer unless the simpler proprioceptive sensors prove valuable. The others are speculative — implement if the first batch produces interesting results.
+

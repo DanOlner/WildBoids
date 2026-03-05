@@ -14,6 +14,7 @@ struct Boid {
     RigidBody body;
     std::vector<Thruster> thrusters;
     float energy = 100.0f;
+    float initial_energy = 100.0f;  // reference value for hunger sensor normalization
     bool alive = true;
     float total_energy_gained = 0.0f;  // cumulative food energy eaten
     float total_energy_spent = 0.0f;   // cumulative metabolism + thrust cost

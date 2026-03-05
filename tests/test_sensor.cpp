@@ -1220,3 +1220,162 @@ TEST_CASE("Two-tier: long-range eye detects food", "[sensor][longrange]") {
     // Long-range: 1 - 200/300 ≈ 0.333
     CHECK_THAT(outputs[1], WithinAbs(1.0f - 200.0f / 300.0f, 0.02f));
 }
+
+// ---- Hunger sensor tests ----
+
+TEST_CASE("Hunger sensor: full energy returns 0", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_hunger_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    b.energy = 100.0f;
+    b.initial_energy = 100.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[2] = {0};  // 1 eye × 1 channel + hunger
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Hunger sensor: zero energy returns 1", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_hunger_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    b.energy = 0.0f;
+    b.initial_energy = 100.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[1], WithinAbs(1.0f, 1e-6f));
+}
+
+TEST_CASE("Hunger sensor: half energy returns 0.5", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_hunger_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    b.energy = 50.0f;
+    b.initial_energy = 100.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 1e-6f));
+}
+
+TEST_CASE("Hunger sensor: overfed clamps to 0", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = false;
+    cfg.has_hunger_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    Boid b = make_boid({400, 400});
+    b.energy = 200.0f;  // ate lots of food, above initial
+    b.initial_energy = 100.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    float outputs[2] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs);
+
+    CHECK_THAT(outputs[1], WithinAbs(0.0f, 1e-6f));
+}
+
+TEST_CASE("Compound eye: total_inputs counts hunger sensor", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food, SensorChannel::Same, SensorChannel::Opposite};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = true;
+    cfg.has_noise_sensor = true;
+    cfg.has_hunger_sensor = false;
+    for (int i = 0; i < 4; ++i) {
+        cfg.eyes.push_back(EyeSpec{i, 0, 90 * DEG, 100});
+    }
+    // 4 eyes × 3 channels + speed + angular_vel + noise = 15
+    CHECK(cfg.total_inputs() == 15);
+
+    cfg.has_hunger_sensor = true;
+    // 4 eyes × 3 channels + speed + angular_vel + noise + hunger = 16
+    CHECK(cfg.total_inputs() == 16);
+}
+
+TEST_CASE("Compound eye: hunger appended after noise", "[sensor][compound][hunger]") {
+    CompoundEyeConfig cfg;
+    cfg.channels = {SensorChannel::Food};
+    cfg.has_speed_sensor = true;
+    cfg.has_angular_velocity_sensor = true;
+    cfg.has_noise_sensor = true;
+    cfg.has_hunger_sensor = true;
+    cfg.eyes.push_back(EyeSpec{0, 0, 90 * DEG, 100});
+    SensorySystem sys(cfg);
+
+    // 1 eye × 1 channel + speed + angular_vel + noise + hunger = 5
+    CHECK(sys.input_count() == 5);
+
+    Boid b = make_boid({400, 400});
+    b.body.velocity = {0, 25.0f};
+    b.body.angular_velocity = 5.0f;
+    b.energy = 75.0f;
+    b.initial_energy = 100.0f;
+
+    auto boids = make_boids(std::move(b));
+    WorldConfig wc = make_compound_config();
+    wc.max_angular_speed = 10.0f;
+    World world(wc);
+    for (auto& boid : boids) world.add_boid(std::move(boid));
+    world.step(0);
+
+    std::mt19937 rng(42);
+    float outputs[5] = {0};
+    sys.perceive(world.get_boids(), world.grid(), world.get_config(), 0, world.get_food(), outputs, &rng);
+
+    // [0] eye: no food
+    CHECK_THAT(outputs[0], WithinAbs(0.0f, 1e-6f));
+    // [1] speed: 25/50 = 0.5
+    CHECK_THAT(outputs[1], WithinAbs(0.5f, 0.02f));
+    // [2] angular velocity: 5/10 = 0.5
+    CHECK_THAT(outputs[2], WithinAbs(0.5f, 0.02f));
+    // [3] noise: some value in [-1, 1]
+    CHECK(outputs[3] >= -1.0f);
+    CHECK(outputs[3] <= 1.0f);
+    // [4] hunger: 1 - 75/100 = 0.25
+    CHECK_THAT(outputs[4], WithinAbs(0.25f, 1e-6f));
+}

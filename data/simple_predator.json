@@ -194,6 +194,7 @@
         "speedSensor": true,
         "angularVelocitySensor": true,
         "noiseSensor": true,
-        "shoalingSensor": false
+        "shoalingSensor": false,
+        "hungerSensor": true
     }
 }
