@@ -347,9 +347,10 @@ def main():
     parser.add_argument('files', nargs='+', help='Champion JSON files')
     parser.add_argument('--config', default=None, help='sim_config.json path (for budget validation)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show per-eye details')
-    parser.add_argument('--plot', '-p', nargs='?', const='morphology_evolution.png',
-                        default=None, metavar='PATH',
-                        help='Generate plots (default: morphology_evolution.png)')
+    parser.add_argument('--plot', '-p', action='store_true',
+                        help='Generate morphology evolution plots')
+    parser.add_argument('--plot-output', '-o', default='morphology_evolution.png',
+                        metavar='PATH', help='Plot output path (default: morphology_evolution.png)')
     args = parser.parse_args()
 
     config_groups = None
@@ -395,8 +396,8 @@ def main():
                         arc_w = f'  arc={g["arc_widths_deg"][i]:.2f}°'
                     print(f'    Eye {i:2d}: angle={math.degrees(a):7.2f}°  frac={f:.4f}{arc_w}')
 
-    if args.plot is not None:
-        plot_morphology_evolution(results, config_groups, args.plot)
+    if args.plot:
+        plot_morphology_evolution(results, config_groups, args.plot_output)
 
     if has_errors:
         print('\nVALIDATION FAILED — see errors above')

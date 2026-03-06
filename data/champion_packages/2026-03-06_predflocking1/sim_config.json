@@ -1,0 +1,92 @@
+{
+    "world": {
+        "width": 2000,
+        "height": 2000,
+        "toroidal": true,
+        "linearDrag": 0.2,
+        "angularDrag": 2.25,
+        "gridCellSize": 100,
+        "maxAngularSpeed": 10.0
+    },
+    "food": {
+        "mode": "patches",
+        "numPatches": 0,
+        "foodPerPatch": 20,
+        "patchRadius": 30.0,
+        "eatRadius": 10.0,
+        "energy": 15.0
+    },
+    "predator": {
+        "catchRadius": 5.0,
+        "catchEnergy": 50.0
+    },
+    "sensors": {
+        "channels": [
+            "food",
+            "same",
+            "opposite"
+        ]
+    },
+    "mouth": {
+        "enabled": true,
+        "arcWidth": 170,
+        "requireApproach": true
+    },
+    "shoaling": {
+        "prey": {
+            "radius": 50.0,
+            "maxReduction": 0.3,
+            "maxNeighbours": 6,
+            "arcDeg": 270
+        },
+        "predator": {
+            "radius": 50.0,
+            "maxReduction": 0.2,
+            "maxNeighbours": 4,
+            "arcDeg": 270
+        }
+    },
+    "energy": {
+        "metabolismRate": 0.1,
+        "thrustCost": 0.01
+    },
+    "evolution": {
+        "populationSize": 150,
+        "ticksPerGeneration": 6000,
+        "generations": 100,
+        "saveInterval": 10,
+        "fitnessMode": "net"
+    },
+    "neat": {
+        "recurrent": true,
+        "addNodeProb": 0.3,
+        "addConnectionProb": 0.3,
+        "weightMutateProb": 0.8,
+        "weightSigma": 0.5,
+        "weightReplaceProb": 0.1,
+        "crossoverProb": 0.75,
+        "compatThreshold": 0.5,
+        "survivalRate": 0.25,
+        "elitism": 1,
+        "maxStagnation": 15
+    },
+    "morphologyEvolution": {
+        "enabled": true,
+        "groups": [
+            {
+                "eyeCount": 16,
+                "totalArcDeg": 360,
+                "maxRange": 100
+            },
+            {
+                "eyeCount": 4,
+                "totalArcDeg": 100,
+                "maxRange": 300
+            }
+        ],
+        "mutation": {
+            "angleSigmaDeg": 5.0,
+            "arcFracSigma": 0.1
+        }
+    }
+}
