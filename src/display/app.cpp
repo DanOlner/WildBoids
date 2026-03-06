@@ -29,8 +29,26 @@ void App::run() {
         if (!paused_) {
             accumulator += frame_time * speed_multiplier_;
             while (accumulator >= dt) {
+                // Snapshot alive states to detect deaths
+                const auto& boids = world_.get_boids();
+                std::vector<bool> was_alive(boids.size());
+                for (size_t i = 0; i < boids.size(); ++i) {
+                    was_alive[i] = boids[i].alive;
+                }
+
                 apply_random_wander();
                 world_.step(static_cast<float>(dt), &rng_);
+
+                // Detect deaths and create flashes
+                for (size_t i = 0; i < boids.size(); ++i) {
+                    if (was_alive[i] && !boids[i].alive) {
+                        renderer_.add_death_flash(
+                            boids[i].body.position.x,
+                            boids[i].body.position.y,
+                            boids[i].type == "predator");
+                    }
+                }
+
                 accumulator -= dt;
             }
         } else {

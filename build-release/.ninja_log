@@ -229,3 +229,17 @@
 3679	4117	1772653394980644122	wildboids_tests	6671f5dc76bdbf8b
 3679	4117	1772653394980644122	wildboids_tests-b12d07c_tests.cmake	6671f5dc76bdbf8b
 3679	4117	1772653394980644122	/Users/danolner/Code/claude/wildboids/build-release/wildboids_tests-b12d07c_tests.cmake	6671f5dc76bdbf8b
+11	438	1772839766496530021	CMakeFiles/wildboids.dir/src/display/renderer.cpp.o	42bc814e6f30a821
+11	522	1772839766496651770	CMakeFiles/wildboids.dir/src/display/app.cpp.o	bd6e2a5c1304fa48
+11	609	1772839766496281521	CMakeFiles/wildboids.dir/src/main.cpp.o	f8f3191f8e25edef
+609	640	1772839767094126060	wildboids	fd836415e67c0f72
+10	392	1772839939807466095	CMakeFiles/wildboids.dir/src/display/renderer.cpp.o	42bc814e6f30a821
+11	483	1772839939807793969	CMakeFiles/wildboids.dir/src/display/app.cpp.o	bd6e2a5c1304fa48
+483	513	1772839940280111287	wildboids	fd836415e67c0f72
+6	399	1772840037494498211	CMakeFiles/wildboids.dir/src/display/renderer.cpp.o	42bc814e6f30a821
+399	429	1772840037887508428	wildboids	fd836415e67c0f72
+6	387	1772840134779331877	CMakeFiles/wildboids.dir/src/display/renderer.cpp.o	42bc814e6f30a821
+387	415	1772840135159661576	wildboids	fd836415e67c0f72
+6	364	1772840356365570061	CMakeFiles/wildboids.dir/src/display/renderer.cpp.o	42bc814e6f30a821
+6	455	1772840356365759561	CMakeFiles/wildboids.dir/src/display/app.cpp.o	bd6e2a5c1304fa48
+455	484	1772840356814861838	wildboids	fd836415e67c0f72

@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 
+
 Renderer::Renderer(int window_width, int window_height, const char* title)
     : window_width_(window_width), window_height_(window_height)
 {
@@ -86,6 +87,8 @@ void Renderer::draw(const World& world, int selected_boid) {
     if (show_neighbours_) {
         draw_neighbour_lines(world);
     }
+
+    draw_death_flashes(config);
 }
 
 void Renderer::present() {
@@ -326,4 +329,44 @@ void Renderer::draw_selection_ring(const Boid& boid, const WorldConfig& config) 
         float y1 = world_to_screen_y(boid.body.position.y + RING_RADIUS * std::sin(a1), config);
         SDL_RenderLine(renderer_, x0, y0, x1, y1);
     }
+}
+
+void Renderer::add_death_flash(float x, float y, bool is_predator) {
+    death_flashes_.push_back({x, y, is_predator, DeathFlash::MAX_FRAMES});
+}
+
+void Renderer::draw_death_flashes(const WorldConfig& config) {
+    if (death_flashes_.empty()) return;
+
+    float w = static_cast<float>(window_width_);
+    float h = static_cast<float>(window_height_);
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    for (auto& flash : death_flashes_) {
+        float alpha = static_cast<float>(flash.frames_remaining) / DeathFlash::MAX_FRAMES;
+        Uint8 a = static_cast<Uint8>(255 * alpha);
+
+        if (flash.is_predator) {
+            SDL_SetRenderDrawColor(renderer_, 255, 60, 40, a);
+        } else {
+            SDL_SetRenderDrawColor(renderer_, 40, 255, 60, a);
+        }
+
+        float sx = world_to_screen_x(flash.x, config);
+        float sy = world_to_screen_y(flash.y, config);
+
+        // Full-width horizontal line and full-height vertical line
+        for (float offset = -1.0f; offset <= 1.0f; offset += 1.0f) {
+            SDL_RenderLine(renderer_, 0, sy + offset, w, sy + offset);
+            SDL_RenderLine(renderer_, sx + offset, 0, sx + offset, h);
+        }
+
+        --flash.frames_remaining;
+    }
+
+    // Remove expired flashes
+    std::erase_if(death_flashes_, [](const DeathFlash& f) {
+        return f.frames_remaining <= 0;
+    });
 }

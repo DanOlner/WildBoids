@@ -2,6 +2,14 @@
 
 #include "simulation/world.h"
 #include <SDL3/SDL.h>
+#include <vector>
+
+struct DeathFlash {
+    float x, y;        // world-space position
+    bool is_predator;   // true = red, false = green
+    int frames_remaining;
+    static constexpr int MAX_FRAMES = 5;
+};
 
 class Renderer {
 public:
@@ -13,6 +21,7 @@ public:
 
   void draw(const World &world, int selected_boid = -1);
   void present();
+  void add_death_flash(float x, float y, bool is_predator);
   bool should_close() const;
 
   float screen_to_world_x(float sx, const WorldConfig &config) const;
@@ -62,4 +71,7 @@ private:
                     int channel_tint = 3, bool long_range = false);
   void draw_food(const std::vector<Food> &food, const WorldConfig &config);
   void draw_selection_ring(const Boid &boid, const WorldConfig &config);
+  void draw_death_flashes(const WorldConfig &config);
+
+  std::vector<DeathFlash> death_flashes_;
 };
