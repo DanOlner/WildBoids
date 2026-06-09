@@ -4,7 +4,7 @@
 
 - ["in which I analyze ANNs when used as scientific instruments of study and when functioning as emergent arbiters of the zeitgeist in the cognitive, computational, and neural sciences."](https://bsky.app/profile/olivia.science/post/3mg5ojrl4p22i)
 
-## Sim log
+## Journo
 
 ### 22.2.26
 
@@ -17,3 +17,12 @@ This boid is doing well at orienting to food source but can't slow enough to sti
 This is also highlighting the the boids have no 'experiment with behaviour when there's no sensor input' going on. They default to static thrust. Though they do still react to fellow boids, I'm not sure that's getting them anywhere. In groups, they spin.
 
 Probably time to set up parameter space searching, as well as testing other aspects are doing what we want. Or possibly jump to predators.
+
+### 7.3.26
+
+Evolution outcomes got a lot further - first collective movement pattern, in predators it turns out, circling food. Bit sinister to watch.
+
+This might be far enough before thinking through... well, maybe a couple of things:
+
+1. Thoroughly test the NEAT and phenotype evolution setup. It's clearly working, but are all the parts working as we want them set up? Part of that can be tested / needs to be tested through the next point...
+2. Observer stuctures

@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffmpeg -version)",
+      "Bash(brew --prefix ffmpeg)",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//opt/homebrew/opt/**)",
+      "Read(//opt/homebrew/opt/ffmpeg/**)",
+      "Read(//opt/homebrew/Cellar/**)",
+      "Bash(/opt/homebrew/bin/python3 -c \"import PIL; print\\('Pillow', PIL.__version__\\)\")",
+      "Bash(/Users/danolner/miniforge3/bin/python3 -c \"import PIL; print\\('Pillow', PIL.__version__\\)\")",
+      "Bash(ffmpeg -hide_banner -filters)",
+      "Bash(grep -v '^  \\\\$')",
+      "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,codec_name,avg_frame_rate -show_entries format=duration -of default=noprint_wrappers=1 test_wildboids_reel.mp4)",
+      "Bash(awk '{print $5}')",
+      "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,codec_name,avg_frame_rate -show_entries format=duration -of default=noprint_wrappers=1 wildboids_reel.mp4)",
+      "Bash(ffmpeg -y -f lavfi -i \"sine=frequency=220:duration=10\" -c:a aac local/videos/test_music.m4a)",
+      "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=nw=1 test_wildboids_reel.mp4)",
+      "Bash(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,channels,duration -of default=nw=1 test_wildboids_reel.mp4)",
+      "Bash(rm -rf /Users/danolner/Code/danolner && echo \"removed stray path\")",
+      "Bash(ffprobe -v error -select_streams a -show_entries stream=codec_name -of default=nw=1:nk=1 wildboids_reel.mp4)"
+    ],
+    "additionalDirectories": [
+      "/Users/danolner/Code/danolner/Code/claude/wildboids/local/videos",
+      "/Users/danolner/Code/danolner"
+    ]
+  }
+}

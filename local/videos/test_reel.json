@@ -1,0 +1,28 @@
+{
+  "_comment": "Quick smoke test: 3 short clips that exercise each trim path (whole clip / end only / start+end). Run with: python3 make_reel.py test_reel.json",
+
+  "output": "test_wildboids_reel.mp4",
+  "width": 1080,
+  "height": 1080,
+  "fps": 30,
+  "background": "0x0d1117",
+  "fontcolor": "white",
+  "font": "/System/Library/Fonts/Supplemental/Arial.ttf",
+  "card_seconds": 2.0,
+  "title_fontsize": 64,
+  "body_fontsize": 40,
+  "max_chars": 34,
+
+  "segments": [
+    { "card": "Test reel\nThree clips, just checking it runs" },
+
+    { "card": "Whole clip\nNo start or end -- plays in full",
+      "clip": "simplest_inoutboids.mov" },
+
+    { "card": "End only\nFirst 5 seconds",
+      "clip": "random_weights_test.mov", "end": 5 },
+
+    { "card": "Start and end\nSeconds 3 to 8",
+      "clip": "circling.mp4", "start": 3, "end": 8 }
+  ]
+}

@@ -1,0 +1,19 @@
+# Keep the reel tooling tracked (README.md, make_reel.py, *.json),
+# but never commit the media files or rendered output.
+
+# Source clips & rendered reels
+*.mov
+*.mp4
+*.mkv
+*.webm
+
+# Soundtrack / audio tracks (delete these lines if you want to commit one)
+*.mp3
+*.m4a
+*.wav
+
+# Temp render scratch dirs created by make_reel.py
+reel_*/
+
+# macOS cruft
+.DS_Store

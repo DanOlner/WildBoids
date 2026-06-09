@@ -1,0 +1,90 @@
+{
+  "_comment": "Edit this file to control the reel. Reorder/add/remove entries in 'segments'. Each segment may have a 'card' (title-card text; first line = big title, rest = smaller body) and/or a 'clip' (filename in this folder). To trim a clip, set 'start' and/or 'end' in seconds; omit both to use the whole clip. Anything under keys starting with '_' is ignored by the script.",
+  "output": "wildboids_reel.mp4",
+  "width": 1080,
+  "height": 1080,
+  "fps": 30,
+  "background": "0x0d1117",
+  "fontcolor": "white",
+  "font": "/System/Library/Fonts/Supplemental/Arial.ttf",
+  "card_seconds": 3.0,
+  "title_fontsize": 64,
+  "body_fontsize": 40,
+  "max_chars": 34,
+  "music": {
+    "_note": "Optional. Set 'file' to an audio file in this folder (mp3/m4a/wav) to add a soundtrack; leave it empty to keep the reel silent. 'start' is how many seconds into the track to begin. 'volume' 1.0 = unchanged. 'loop' repeats the track if it is shorter than the reel. 'fade_in'/'fade_out' are in seconds.",
+    "file": "",
+    "start": 0,
+    "volume": 0.7,
+    "loop": true,
+    "fade_in": 1.5,
+    "fade_out": 3.0
+  },
+  "segments": [
+    {
+      "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& brains that grow to fit"
+    },
+    {
+      "card": "A torus world\nBoids wrap seamlessly around every edge",
+      "clip": "stage1_torustest.mov",
+      "start": 3,
+      "end": 8
+    },
+    {
+      "card": "Giving them senses\nVision detects food and nearby boids",
+      "clip": "stage2_sensetest.mov",
+      "start": 3,
+      "end": 9
+    },
+    {
+      "card": "Early evolution fails\nThey discover spinning -- not quite right yet",
+      "clip": "evolved_spinning.mov",
+      "start": 3,
+      "end": 10
+    },
+    {
+      "card": "Learning control\nSlow but sometimes getting food",
+      "clip": "evolved_slower.mov",
+      "start": 3,
+      "end": 17
+    },
+    {
+      "card": "The simplest brain\nSensors wired straight to thrusters, no neurons.\nNot bad.",
+      "clip": "simplest_inoutboids.mov"
+    },
+    {
+      "card": "NEAT evolution\nTiny number of neurons now.",
+      "clip": "addNodeProb_0point1.mov",
+      "start": 1,
+      "end": 15
+    },
+    {
+      "card": "Interoception (gen 47)\nA boid that can sense its own speed",
+      "clip": "first_interoception_speed_gen47_champion_gen47_6c5b26c9380f8c5e03bac5d1b049e6f58366377b.mov",
+      "end": 15
+    },
+    {
+      "card": "Predators arrive\nTwo species now co-evolve together",
+      "clip": "first_predators.mov",
+      "start": 3,
+      "end": 25
+    },
+    {
+      "card": "Predators circle food\nwaiting for prey\nFirst instance of emerged flocking",
+      "clip": "circling.mp4"
+    },
+    {
+      "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code"
+    }
+  ],
+  "_unused_needs_description": {
+    "_note": "These clips are not in the reel. The 'Screen Recording' files have no descriptive name -- caption them and move them into 'segments' if you want them. circling.mp4.mov is a byte-identical duplicate of circling.mp4.",
+    "files": [
+      "Screen Recording 2026-02-23 at 19.29.28.mov",
+      "Screen Recording 2026-02-23 at 19.30.21.mov",
+      "Screen Recording 2026-02-24 at 17.51.54.mov",
+      "Screen Recording 2026-03-06 at 16.03.13.mov",
+      "circling.mp4.mov"
+    ]
+  }
+}
