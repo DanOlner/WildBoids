@@ -18,7 +18,8 @@
       "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -show_entries format=duration -of default=nw=1 test_wildboids_reel.mp4)",
       "Bash(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,channels,duration -of default=nw=1 test_wildboids_reel.mp4)",
       "Bash(rm -rf /Users/danolner/Code/danolner && echo \"removed stray path\")",
-      "Bash(ffprobe -v error -select_streams a -show_entries stream=codec_name -of default=nw=1:nk=1 wildboids_reel.mp4)"
+      "Bash(ffprobe -v error -select_streams a -show_entries stream=codec_name -of default=nw=1:nk=1 wildboids_reel.mp4)",
+      "Bash(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of default=nw=1 wildboids_reel.mp4)"
     ],
     "additionalDirectories": [
       "/Users/danolner/Code/danolner/Code/claude/wildboids/local/videos",
