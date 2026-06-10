@@ -66,6 +66,119 @@ Runs evolution without graphics. Outputs CSV to stdout, status/diagnostics to st
 
 ---
 
+## GUI (`wildboids`)
+
+Loads evolved champions (or random-weight boids) and renders the live simulation with SDL3. Status/diagnostics go to stderr. Run from the project root so default data paths resolve.
+
+### CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--champion PATH` | *(none)* | Load evolved prey champion JSON. Without it, prey spawn with random NEAT weights from `data/simple_boid.json`. |
+| `--prey-champion PATH` | *(none)* | Alias for `--champion`. |
+| `--predator-champion PATH` | *(none)* | Load evolved predator champion JSON. Implies predators are present (count defaults to 10 if `--predators` not given). |
+| `--boids N` | 30 | Number of prey boids. |
+| `--predators N` | 0 | Number of predator boids. Falls back to `data/simple_predator.json` if no `--predator-champion` given. |
+| `--config PATH` | `data/sim_config.json` | Sim config JSON. Use the **same** config the champion evolved under so physics replay identically. |
+| `--package NAME` | *(none)* | Load prey champion, predator champion, and config together from `data/champion_packages/NAME/` (see [Packaging Champions](#packaging-champions-admin_codepackage_championspy)). Explicit `--prey-champion` / `--predator-champion` / `--config` flags override the package's files. A package with a predator champion auto-spawns predators (count via `--predators`, default 10). |
+| `--world-size N` | from config | World width and height in world units (square). Overrides `world` size in the config (and any `--package` config). Applied before spawning, so wrapping and the default window size pick it up. |
+| `--window-size N` | world size | Window size in pixels. Independent of `--world-size`: a smaller window just scales (zooms) the same world. |
+| `--help` | — | Show usage and exit. |
+
+### Examples
+
+```bash
+# Watch a single evolved prey champion (50 boids of it)
+./build/wildboids --champion data/champions/prey_best.json --boids 50
+
+# Random-weight prey (no champion) — useful for sanity-checking physics
+./build/wildboids --boids 30
+
+# Evolved predator vs evolved prey, 10 predators
+./build/wildboids \
+  --prey-champion data/champions/prey_best.json \
+  --predator-champion data/champions/predators/pred_best.json \
+  --predators 10
+
+# Replay a champion under the exact config it evolved with, in a smaller window
+./build/wildboids --champion data/champions/prey_best.json \
+  --config data/sim_config.json --window-size 900
+
+# Replay a packaged matchup (prey + predator + config) by folder name
+./build/wildboids --package 2026-03-02
+
+# Same package, but override the predator count
+./build/wildboids --package 2026-03-02 --predators 30
+
+# Override the world size (square), independent of window size
+./build/wildboids --champion data/champions/prey_best.json \
+  --world-size 2000 --window-size 900
+```
+
+### Keyboard & Mouse Controls
+
+Source of truth: `src/display/app.cpp` (`App::handle_events`).
+
+| Input | Action |
+|-------|--------|
+| **Space** | Pause / resume |
+| **Escape** | Quit |
+| **T** | Toggle thruster display |
+| **D** | Toggle neighbour lines |
+| **S** | Toggle sensor arcs |
+| **F** | Cycle sim speed (1 → 2 → 4 → 8 → 16 → 1×) |
+| **P** | Dump first predator's sensor diagnostic CSV to `sensor_debug.csv` |
+| **K / L** | Select previous / next boid |
+| **Mouse click** | Select boid under cursor |
+
+When **paused** with a boid selected:
+
+| Input | Action |
+|-------|--------|
+| **Arrow keys** | Nudge selected boid's position |
+| **, / .** | Rotate selected boid ±1° |
+
+---
+
+## Packaging Champions (`admin_code/package_champions.py`)
+
+Standalone Python helper (not part of the C++ build) that bundles a matched prey + predator champion together with the `sim_config.json` they evolved under, into a dated folder. This keeps a self-contained "matchup" that the GUI can replay with identical physics, even as later runs overwrite the loose champion files in `data/champions/`.
+
+### What it produces
+
+A folder `data/champion_packages/YYYY-MM-DD/` (auto-suffixed `_2`, `_3`, … if the date already exists) containing:
+
+| File | Source | Notes |
+|------|--------|-------|
+| `champion_prey_genN.json` | `data/champions/` | Falls back to `champion_genN.json` for prey-only runs. |
+| `champion_predator_genM.json` | `data/champions/predators/` | Omitted if no predator champion is found. |
+| `sim_config.json` | `data/sim_config.json` | Snapshot of the world/physics config. |
+
+### Modes
+
+| Invocation | Behaviour |
+|------------|-----------|
+| *(no args)* | **Auto:** reads `coevolution_log.csv` and picks the prey/predator generations with the highest `prey_best` / `pred_best` fitness. Falls back to highest generation if the log is absent. |
+| `--prey N --pred M` | **Explicit:** package the named generation numbers. |
+| `--latest` | **Highest generation:** pick the largest `genN`, regardless of fitness. |
+
+### Examples
+
+```bash
+# Auto-pick the fittest prey + predator from coevolution_log.csv
+python3 admin_code/package_champions.py
+
+# Package specific generations
+python3 admin_code/package_champions.py --prey 137 --pred 109
+
+# Package the highest-numbered generation
+python3 admin_code/package_champions.py --latest
+```
+
+The script prints the folder name on completion (e.g. `2026-03-02`), suitable for a commit message. Replay a package in the GUI with `wildboids --package NAME` (see the [GUI](#gui-wildboids) section), which loads all three files by folder name.
+
+---
+
 ## NEAT Parameters (`sim_config.json` → `"neat"` block)
 
 Maps to `PopulationParams` in `src/brain/population.h`.

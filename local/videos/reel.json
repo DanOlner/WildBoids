@@ -13,7 +13,7 @@
   "max_chars": 34,
   "music": {
     "_note": "Optional. Set 'file' to an audio file in this folder (mp3/m4a/wav) to add a soundtrack; leave it empty to keep the reel silent. 'start' is how many seconds into the track to begin. 'volume' 1.0 = unchanged. 'loop' repeats the track if it is shorter than the reel. 'fade_in'/'fade_out' are in seconds.",
-    "file": "",
+    "file": "TeboSteeleAirandwater.mp3",
     "start": 0,
     "volume": 0.7,
     "loop": true,
@@ -25,25 +25,19 @@
       "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& brains that grow to fit"
     },
     {
-      "card": "A torus world\nBoids wrap seamlessly around every edge",
-      "clip": "stage1_torustest.mov",
-      "start": 3,
-      "end": 8
-    },
-    {
       "card": "Giving them senses\nVision detects food and nearby boids",
       "clip": "stage2_sensetest.mov",
       "start": 3,
       "end": 9
     },
     {
-      "card": "Early evolution fails\nThey discover spinning -- not quite right yet",
+      "card": "Early evolution fails\nSpinning isn't a\nterrible search method\nBut also not great",
       "clip": "evolved_spinning.mov",
       "start": 3,
       "end": 10
     },
     {
-      "card": "Learning control\nSlow but sometimes getting food",
+      "card": "Learning control\nSlow but learning\nto target food",
       "clip": "evolved_slower.mov",
       "start": 3,
       "end": 17
@@ -53,7 +47,7 @@
       "clip": "simplest_inoutboids.mov"
     },
     {
-      "card": "NEAT evolution\nTiny number of neurons now.",
+      "card": "NEAT evolution\nTiny number of neurons\ngive advantage",
       "clip": "addNodeProb_0point1.mov",
       "start": 1,
       "end": 15
@@ -64,17 +58,23 @@
       "end": 15
     },
     {
-      "card": "Predators arrive\nTwo species now co-evolve together",
+      "card": "Predators arrive\nTwo species now co-evolve",
       "clip": "first_predators.mov",
       "start": 3,
       "end": 25
     },
     {
-      "card": "Predators circle food\nwaiting for prey\nFirst instance of emerged flocking",
+      "card": "More complex vision\nEye position & width now evolve",
+      "clip": "singlepred_chase_w_sensor.mov",
+      "start": 39,
+      "end": 59
+    },
+    {
+      "card": "First emergence of flocking\nPredators circle food\nwaiting for prey",
       "clip": "circling.mp4"
     },
     {
-      "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code"
+      "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code\nMusic: Air & Water by\nTebo Steele\nFree Music Archive"
     }
   ],
   "_unused_needs_description": {

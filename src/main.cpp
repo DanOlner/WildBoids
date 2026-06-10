@@ -6,17 +6,66 @@
 #include "simulation/morphology_genome.h"
 #include "simulation/world.h"
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <random>
+
+namespace fs = std::filesystem;
+
+// Paths discovered inside a champion_packages/<name>/ folder.
+struct PackagePaths {
+  std::string prey;
+  std::string predator;
+  std::string config;
+};
+
+// Resolve a champion_packages/<name>/ folder into its prey, predator, and config
+// paths by scanning for the conventional filenames. Champion files embed a
+// generation number (champion_prey_genN.json) so we match by prefix rather than
+// exact name. Returns false (after printing to stderr) if the folder is missing
+// or contains no prey champion.
+static bool resolve_package(const std::string& name, PackagePaths& out) {
+  fs::path dir = fs::path("data/champion_packages") / name;
+  if (!fs::is_directory(dir)) {
+    std::cerr << "Package folder not found: " << dir.string() << "\n";
+    return false;
+  }
+  std::string prey_fallback;  // prey-only runs name the file champion_genN.json
+  for (const auto& entry : fs::directory_iterator(dir)) {
+    if (!entry.is_regular_file()) continue;
+    std::string fname = entry.path().filename().string();
+    std::string path = entry.path().string();
+    if (fname == "sim_config.json") {
+      out.config = path;
+    } else if (fname.rfind("champion_prey", 0) == 0) {
+      if (out.prey.empty()) out.prey = path;
+      else std::cerr << "Warning: multiple prey champions in package, using " << out.prey << "\n";
+    } else if (fname.rfind("champion_predator", 0) == 0) {
+      if (out.predator.empty()) out.predator = path;
+      else std::cerr << "Warning: multiple predator champions in package, using " << out.predator << "\n";
+    } else if (fname.rfind("champion_gen", 0) == 0) {
+      prey_fallback = path;
+    }
+  }
+  if (out.prey.empty()) out.prey = prey_fallback;
+  if (out.prey.empty()) {
+    std::cerr << "No prey champion found in package: " << dir.string() << "\n";
+    return false;
+  }
+  return true;
+}
 
 int main(int argc, char* argv[]) {
   // Parse args
   std::string prey_champion_path;
   std::string predator_champion_path;
   std::string config_path = "data/sim_config.json";
+  bool config_explicit = false;  // true once --config is passed, so a package won't override it
+  std::string package_name;
   int num_boids = 30;
   int num_predators = 0;
   int window_size = 0;  // 0 = use world size
+  int world_size = 0;   // 0 = use config; >0 overrides config (square)
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--champion") == 0 && i + 1 < argc) {
       prey_champion_path = argv[++i];
@@ -30,8 +79,13 @@ int main(int argc, char* argv[]) {
       num_predators = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
       config_path = argv[++i];
+      config_explicit = true;
+    } else if (std::strcmp(argv[i], "--package") == 0 && i + 1 < argc) {
+      package_name = argv[++i];
     } else if (std::strcmp(argv[i], "--window-size") == 0 && i + 1 < argc) {
       window_size = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--world-size") == 0 && i + 1 < argc) {
+      world_size = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--help") == 0) {
       std::cerr << "Usage: " << argv[0] << " [options]\n"
                 << "  --champion PATH          Load evolved prey champion JSON\n"
@@ -40,10 +94,23 @@ int main(int argc, char* argv[]) {
                 << "  --boids N                Number of prey boids (default: 30)\n"
                 << "  --predators N            Number of predator boids (default: 0)\n"
                 << "  --config PATH            Sim config JSON (default: data/sim_config.json)\n"
+                << "  --package NAME           Load prey, predator, and config from data/champion_packages/NAME/\n"
+                << "  --world-size N           World width and height in world units (square; overrides config)\n"
                 << "  --window-size N          Window size in pixels (default: world size)\n"
                 << "  --help                   Show this help\n";
       return 0;
     }
+  }
+
+  // Resolve --package into prey/predator/config paths. Explicit flags win, so a
+  // package only fills paths the user didn't set directly.
+  if (!package_name.empty()) {
+    PackagePaths pkg;
+    if (!resolve_package(package_name, pkg)) return 1;
+    if (prey_champion_path.empty()) prey_champion_path = pkg.prey;
+    if (predator_champion_path.empty()) predator_champion_path = pkg.predator;
+    if (!config_explicit && !pkg.config.empty()) config_path = pkg.config;
+    std::cerr << "Loaded package: " << package_name << "\n";
   }
 
   // Load world config from shared sim_config.json
@@ -54,6 +121,15 @@ int main(int argc, char* argv[]) {
   } catch (const std::exception& e) {
     std::cerr << "Failed to load sim config: " << e.what() << "\n";
     return 1;
+  }
+
+  // --world-size overrides the config world dimensions (square). Applied before
+  // the world is built so spawning, wrapping, and the default window size all
+  // pick up the new size.
+  if (world_size > 0) {
+    sim.world.width = static_cast<float>(world_size);
+    sim.world.height = static_cast<float>(world_size);
+    std::cerr << "World size overridden to " << world_size << " (square)\n";
   }
 
   World world(sim.world);

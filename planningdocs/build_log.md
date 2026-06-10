@@ -125,7 +125,7 @@ Sensory system implemented. Each boid has an array of wedge-shaped sensor arcs t
 | `tests/test_sensor.cpp` | Created | 14 tests: `angle_in_arc` (center/edge/outside/wrap), perception (ahead/outside-arc/outside-range/self/toroidal-wrap/entity-filter/rotated-boid/sector-density/multi-sensor/world-integration) |
 | `tests/test_boid_spec.cpp` | Modified | Updated version check to "0.2", added sensor count/angle/filter/signal-type checks, sensor round-trip verification |
 
-**Keyboard controls now:** Space (pause), T (thrusters), D (neighbour lines), S (sensor arcs), Escape (quit).
+**Keyboard controls at this point:** Space (pause), T (thrusters), D (neighbour lines), S (sensor arcs), Escape (quit). *(Historical snapshot — for the current, complete control list see the GUI section in [spec.md](spec.md), source of truth `src/display/app.cpp`.)*
 
 **Decisions resolved:**
 - **7 sensors** for the default boid: 5 forward-facing 36° arcs covering ±90° ahead, plus 2 wide 90° rear arcs. All `NearestDistance` signal type, `Any` entity filter, 100 world unit range. This gives 7 floats as neural network input.
