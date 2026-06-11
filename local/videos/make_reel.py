@@ -99,9 +99,13 @@ def render_clip(src, dst, cfg, start=None, end=None, duration=None):
     run(cmd)
 
 
-def render_card(text, dst, cfg, tmpdir, idx):
-    """Draw a centered title card to a PNG (Pillow), then encode it to video."""
+def render_card(text, dst, cfg, tmpdir, idx, seconds=None):
+    """Draw a centered title card to a PNG (Pillow), then encode it to video.
+    'seconds' overrides the global card_seconds for this card."""
     from PIL import Image, ImageColor, ImageDraw, ImageFont
+
+    if seconds is None:
+        seconds = cfg["card_seconds"]
 
     w, h, fps = cfg["width"], cfg["height"], cfg["fps"]
     title_fs = cfg["title_fontsize"]
@@ -141,7 +145,7 @@ def render_card(text, dst, cfg, tmpdir, idx):
     img.save(png)
     run([
         "ffmpeg", "-y", "-loop", "1", "-i", png,
-        "-t", str(cfg["card_seconds"]), "-r", str(fps),
+        "-t", str(seconds), "-r", str(fps),
         "-vf", "format=yuv420p",
         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-pix_fmt", "yuv420p",
@@ -225,7 +229,8 @@ def main():
 
             if "card" in seg:
                 card_mp4 = os.path.join(tmpdir, f"seg{idx:03d}_card.mp4")
-                render_card(seg["card"], card_mp4, cfg, tmpdir, idx)
+                render_card(seg["card"], card_mp4, cfg, tmpdir, idx,
+                            seconds=seg.get("card_seconds"))
                 parts.append(card_mp4)
 
             if "clip" in seg:

@@ -50,6 +50,7 @@ card before it).
 | `clip`     | A video filename in this folder.                                     |
 | `start`    | Seconds into the clip to begin (optional).                           |
 | `end`      | Seconds into the clip to stop (optional).                            |
+| `card_seconds` | How long *this* card shows, overriding the global default (optional). Handy for giving a wordier card more reading time. |
 
 Omit both `start` and `end` to use the whole clip. Examples:
 

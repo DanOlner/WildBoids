@@ -7,13 +7,13 @@
   "background": "0x0d1117",
   "fontcolor": "white",
   "font": "/System/Library/Fonts/Supplemental/Arial.ttf",
-  "card_seconds": 3.0,
+  "card_seconds": 5.0,
   "title_fontsize": 64,
   "body_fontsize": 40,
   "max_chars": 34,
   "music": {
     "_note": "Optional. Set 'file' to an audio file in this folder (mp3/m4a/wav) to add a soundtrack; leave it empty to keep the reel silent. 'start' is how many seconds into the track to begin. 'volume' 1.0 = unchanged. 'loop' repeats the track if it is shorter than the reel. 'fade_in'/'fade_out' are in seconds.",
-    "file": "TeboSteeleAirandwater.mp3",
+    "file": "onotrack.mp3",
     "start": 0,
     "volume": 0.7,
     "loop": true,
@@ -25,56 +25,60 @@
       "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& brains that grow to fit"
     },
     {
-      "card": "Giving them senses\nVision detects food and nearby boids",
+      "card": "Giving them senses\nVision detects nearby boids\n(but they don't connect\nto thrust yet)",
       "clip": "stage2_sensetest.mov",
       "start": 3,
       "end": 9
     },
     {
-      "card": "Early evolution fails\nSpinning isn't a\nterrible search method\nBut also not great",
+      "card": "Early evolution not so hot\nSpinning isn't a\nterrible search method\n(it's seen in nature)\nbut could be better...",
       "clip": "evolved_spinning.mov",
       "start": 3,
       "end": 10
     },
     {
-      "card": "Learning control\nSlow but learning\nto target food",
+      "card": "Learning control\nBeginning to target food\nthrough thruster steering\n(shown in orange lines)",
       "clip": "evolved_slower.mov",
       "start": 3,
       "end": 17
     },
     {
-      "card": "The simplest brain\nSensors wired straight to thrusters, no neurons.\nNot bad.",
+      "card": "Many more generations...\nThe simplest brain -\nsensors wired straight to thrusters, no neurons.\nNot bad.",
       "clip": "simplest_inoutboids.mov"
     },
     {
-      "card": "NEAT evolution\nTiny number of neurons\ngive advantage",
+      "card": "NEAT evolution\nAdd neurons slowly\nbetween senses & thrusters\nSelection keeps them if\nan advantage",
       "clip": "addNodeProb_0point1.mov",
       "start": 1,
       "end": 15
     },
     {
-      "card": "Interoception (gen 47)\nA boid that can sense its own speed",
+      "card": "Interoception\nA boid that can sense\nits own speed\nand angular momentum",
       "clip": "first_interoception_speed_gen47_champion_gen47_6c5b26c9380f8c5e03bac5d1b049e6f58366377b.mov",
+      "start": 5,
       "end": 15
     },
     {
       "card": "Predators arrive\nTwo species now co-evolve",
       "clip": "first_predators.mov",
-      "start": 3,
-      "end": 25
+      "start": 4,
+      "end": 22
     },
     {
-      "card": "More complex vision\nEye position & width now evolve",
+      "card": "More complex vision\nEye position & arc-width now selected for",
       "clip": "singlepred_chase_w_sensor.mov",
       "start": 39,
-      "end": 59
+      "end": 57
     },
     {
-      "card": "First emergence of flocking\nPredators circle food\nwaiting for prey",
-      "clip": "circling.mp4"
+      "card": "First emergence of flocking\nPredators circle food\nwaiting for prey\nTwo extra thrusters for better\nholonomic control",
+      "clip": "circling.mp4",
+      "start": 1,
+      "end": 14
     },
     {
-      "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code\nMusic: Air & Water by\nTebo Steele\nFree Music Archive"
+      "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code\ngithub.com/DanOlner/WildBoids\ndanolner@gmail.com\n\nMusic: Candle Light - extinció by\nOno\nFree Music Archive",
+      "card_seconds": 15
     }
   ],
   "_unused_needs_description": {
