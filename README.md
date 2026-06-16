@@ -8,8 +8,7 @@ network and whose sensory layout (its "eyes") evolves too. Feeding, evasion, hun
 
 ![Predators circling in the live simulation, sensor arcs drawn as radiating lines](predator_flocking.gif)
 
-*Live simulation: predators (the bodies with radiating sensor lines) circling in the SDL3
-renderer.*
+*Simulation: predators circling food, waiting for prey. Thusters strenght shown in orange lines.*
 
 ## How it works
 
