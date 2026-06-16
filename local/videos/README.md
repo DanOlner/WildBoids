@@ -51,6 +51,16 @@ card before it).
 | `start`    | Seconds into the clip to begin (optional).                           |
 | `end`      | Seconds into the clip to stop (optional).                            |
 | `card_seconds` | How long *this* card shows, overriding the global default (optional). Handy for giving a wordier card more reading time. |
+| `crop`     | Zoom in by keeping the central fraction of the frame, then scaling it back up to fill — good for losing window borders. `0.8` or `80` both mean "central 80%" (trims ~10% off every edge). Default = whole frame. |
+
+To find the right `crop` without re-rendering the reel, use the preview helper —
+it shows one frame at several crop levels side by side:
+
+```bash
+python3 preview_crop.py stage2_sensetest.mov 95 90 85 80 --at 5
+```
+
+It writes/opens `preview_crop.png`. `--at` picks which second to sample.
 
 Omit both `start` and `end` to use the whole clip. Examples:
 

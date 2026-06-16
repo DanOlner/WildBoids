@@ -1,1 +1,8 @@
 "card": "Wild Boids\n2007 Java prototype, rebuilt in 2026 with\nC++ & Claude Code\nMusic: Air & Water by\nTebo Steele\nFree Music Archive\ngithub.com/DanOlner/WildBoids\ndanolner@gmail.com"
+
+{
+      "card": "Giving them senses\nVision detects nearby boids\n(but they don't connect\nto thrust yet)",
+      "clip": "stage2_sensetest.mov",
+      "start": 3,
+      "end": 9
+    },

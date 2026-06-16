@@ -28,7 +28,11 @@
       "Bash(timeout 3 ./build/wildboids --package 2026-03-02)",
       "Bash(timeout 3 ./build/wildboids --package 2026-03-02 2>/tmp/wb_pkg.log; echo \"\\(exited\\)\" *)",
       "Read(//tmp/**)",
-      "Bash(./build-release/wildboids --help)"
+      "Bash(./build-release/wildboids --help)",
+      "Bash(awk '{print \"preview_crop.png:\", $5}')",
+      "Bash(open /Users/danolner/Code/claude/wildboids/local/videos/crop_previews/)",
+      "Bash(ffprobe -v error -show_entries format=duration,size -show_entries stream=width,height,r_frame_rate -of default=noprint_wrappers=1 local/videos/circling.mp4)",
+      "Bash(git check-ignore *)"
     ],
     "additionalDirectories": [
       "/Users/danolner/Code/danolner/Code/claude/wildboids/local/videos",

@@ -66,19 +66,36 @@ def run(cmd):
         die("ffmpeg failed (see output above)")
 
 
-def normalize_filter(w, h, fps):
-    """Scale to fit inside WxH keeping aspect, pad the rest, fix sar/fps."""
-    return (
-        f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
-        f"setsar=1,fps={fps},format=yuv420p"
-    )
+def normalize_crop(crop):
+    """Accept 0.8 *or* 80 to mean 'keep central 80%'. Returns a 0<f<=1 fraction."""
+    if crop is None:
+        return 1.0
+    f = crop / 100.0 if crop > 1 else float(crop)
+    if not (0 < f <= 1):
+        die(f"crop must be between 0 and 1 (or a percent up to 100); got {crop}")
+    return f
 
 
-def render_clip(src, dst, cfg, start=None, end=None, duration=None):
+def normalize_filter(w, h, fps, crop=1.0):
+    """Optionally center-crop to the central 'crop' fraction (zooming in), then
+    scale to fit inside WxH keeping aspect, pad the rest, fix sar/fps."""
+    chain = []
+    if crop < 1.0:
+        chain.append(f"crop=iw*{crop}:ih*{crop}")  # crop is centered by default
+    chain += [
+        f"scale={w}:{h}:force_original_aspect_ratio=decrease",
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black",
+        "setsar=1", f"fps={fps}", "format=yuv420p",
+    ]
+    return ",".join(chain)
+
+
+def render_clip(src, dst, cfg, start=None, end=None, duration=None, crop=None):
     """Trim with optional 'start'/'end' (seconds). Omit both for the whole clip.
-    'duration' is still honoured for back-compat; 'end' wins if both are given."""
+    'duration' is still honoured for back-compat; 'end' wins if both are given.
+    'crop' zooms in, keeping the central fraction (0.8 or 80 = central 80%)."""
     w, h, fps = cfg["width"], cfg["height"], cfg["fps"]
+    crop = normalize_crop(crop)
     if end is not None:
         if end <= (start or 0):
             die(f"end ({end}) must be greater than start ({start or 0}) for {src}")
@@ -91,7 +108,7 @@ def render_clip(src, dst, cfg, start=None, end=None, duration=None):
         cmd += ["-t", str(duration)]
     cmd += [
         "-an",  # drop audio so every segment is uniform
-        "-vf", normalize_filter(w, h, fps),
+        "-vf", normalize_filter(w, h, fps, crop),
         "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-pix_fmt", "yuv420p", "-r", str(fps),
         dst,
@@ -239,7 +256,8 @@ def main():
                     die(f"clip not found: {src}")
                 clip_mp4 = os.path.join(tmpdir, f"seg{idx:03d}_clip.mp4")
                 render_clip(src, clip_mp4, cfg, start=seg.get("start"),
-                            end=seg.get("end"), duration=seg.get("duration"))
+                            end=seg.get("end"), duration=seg.get("duration"),
+                            crop=seg.get("crop"))
                 parts.append(clip_mp4)
 
         # Concatenate (all parts share identical encoding -> stream copy).

@@ -22,50 +22,52 @@
   },
   "segments": [
     {
-      "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& brains that grow to fit"
+      "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& tiny boid brains\nthat grow to fit"
     },
     {
-      "card": "Giving them senses\nVision detects nearby boids\n(but they don't connect\nto thrust yet)",
-      "clip": "stage2_sensetest.mov",
-      "start": 3,
-      "end": 9
+      "card": "Start with randomised genes\nBoids just as likely to run away from food\nas move toward it.\nThose ones don't survive..."
     },
     {
-      "card": "Early evolution not so hot\nSpinning isn't a\nterrible search method\n(it's seen in nature)\nbut could be better...",
+      "card": "Early evolution not so hot\nSpinning isn't a\nterrible search method\n(it's seen in nature)\nbut could be better\nPoor dizzy boids",
       "clip": "evolved_spinning.mov",
       "start": 3,
-      "end": 10
+      "end": 10,
+      "crop": 0.85
     },
     {
       "card": "Learning control\nBeginning to target food\nthrough thruster steering\n(shown in orange lines)",
       "clip": "evolved_slower.mov",
       "start": 3,
-      "end": 17
+      "end": 17,
+      "crop": 0.85
     },
     {
-      "card": "Many more generations...\nThe simplest brain -\nsensors wired straight to thrusters, no neurons.\nNot bad.",
+      "card": "Many more generations...\nThe simplest brain -\nsensors wired straight to thrusters, no neurons\nNot bad",
       "clip": "simplest_inoutboids.mov"
     },
     {
       "card": "NEAT evolution\nAdd neurons slowly\nbetween senses & thrusters\nSelection keeps them if\nan advantage",
       "clip": "addNodeProb_0point1.mov",
       "start": 1,
-      "end": 15
+      "end": 15,
+      "crop": 0.85
     },
     {
       "card": "Interoception\nA boid that can sense\nits own speed\nand angular momentum",
       "clip": "first_interoception_speed_gen47_champion_gen47_6c5b26c9380f8c5e03bac5d1b049e6f58366377b.mov",
       "start": 5,
-      "end": 15
+      "end": 15,
+      "crop": 0.70
     },
     {
-      "card": "Predators arrive\nTwo species now co-evolve",
+      "card": "Predators arrive\nTwo species now co-evolve\nOriginal boids\nnot best pleased",
       "clip": "first_predators.mov",
       "start": 4,
-      "end": 22
+      "end": 22,
+      "crop": 0.8
     },
     {
-      "card": "More complex vision\nEye position & arc-width now selected for",
+      "card": "More complex vision\nEye position & arc-width now selected for\n& they can see a bit further",
       "clip": "singlepred_chase_w_sensor.mov",
       "start": 39,
       "end": 57

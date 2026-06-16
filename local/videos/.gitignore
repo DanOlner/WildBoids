@@ -15,5 +15,8 @@
 # Temp render scratch dirs created by make_reel.py
 reel_*/
 
+# Crop-preview images
+*.png
+
 # macOS cruft
 .DS_Store
