@@ -8,7 +8,7 @@ network and whose sensory layout (its "eyes") evolves too. Feeding, evasion, hun
 
 ![Predators circling in the live simulation, sensor arcs drawn as radiating lines](predator_flocking.gif)
 
-*Simulation: predators circling food, waiting for prey. Thusters strenght shown in orange lines.*
+*Simulation: predators circling food, waiting for prey. Thruster power shown in orange lines.*
 
 ## How it works
 
