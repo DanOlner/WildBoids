@@ -25,7 +25,11 @@
       "card": "Wild Boids\nEvolving predators & prey\nusing realistic thrust\n& tiny boid brains\nthat grow to fit"
     },
     {
-      "card": "Start with randomised genes\nBoids just as likely to run away from food\nas move toward it.\nThose ones don't survive..."
+      "card": "Start with randomised genes\nBoids just as likely to run away\nfrom food as move toward it.\nThose ones don't do so well...",
+      "clip": "randomboids.mov",
+      "start": 3,
+      "end": 10,
+      "crop": 0.85
     },
     {
       "card": "Early evolution not so hot\nSpinning isn't a\nterrible search method\n(it's seen in nature)\nbut could be better\nPoor dizzy boids",
@@ -73,7 +77,7 @@
       "end": 57
     },
     {
-      "card": "First emergence of flocking\nPredators circle food\nwaiting for prey\nTwo extra thrusters for better\nholonomic control",
+      "card": "First emergence of flocking\nPredators circle food\nwaiting for prey",
       "clip": "circling.mp4",
       "start": 1,
       "end": 14
