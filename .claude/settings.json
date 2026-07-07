@@ -32,7 +32,20 @@
       "Bash(awk '{print \"preview_crop.png:\", $5}')",
       "Bash(open /Users/danolner/Code/claude/wildboids/local/videos/crop_previews/)",
       "Bash(ffprobe -v error -show_entries format=duration,size -show_entries stream=width,height,r_frame_rate -of default=noprint_wrappers=1 local/videos/circling.mp4)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(grep -v \"\\\\.html$\")",
+      "Bash(python -c \"import matplotlib, numpy, networkx; print\\('deps OK'\\)\")",
+      "Bash(python scripts/compare_champions.py --package data/champion_packages/2026-03-04)",
+      "Bash(python scripts/compare_champions.py --package data/champion_packages/ac525be3b2ff28c57f538ac2fff2ac2b2555c0fc)",
+      "Bash(python -c ' *)",
+      "Bash(python scripts/compare_champions.py data/champion_packages/2026-03-04/champion_prey_gen48.json data/champion_packages/2026-03-04/champion_predator_gen76.json -o /private/tmp/claude-501/-Users-danolner-Code-claude-wildboids/01b7a4db-e110-4736-a49e-6de47d696225/scratchpad/loose_out.html)",
+      "Bash(python scripts/compare_champions.py --package data/champion_packages/does_not_exist)",
+      "Bash(git --no-pager diff scripts/compare_champions.py)",
+      "Bash(python scripts/build_comparison_index.py)",
+      "Bash(python -c 'import html.parser,sys; *)",
+      "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/champion-comparison-index.yml'\\)\\); print\\('workflow YAML OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git -c core.pager=cat diff --stat -- docs/champion_comparisons/index.html)"
     ],
     "additionalDirectories": [
       "/Users/danolner/Code/danolner/Code/claude/wildboids/local/videos",

@@ -1,0 +1,53 @@
+name: Champion comparison index
+
+# Rebuilds docs/champion_comparisons/index.html whenever comparison reports are
+# added, changed, or removed, and commits the refreshed index back.
+#
+# Loop-safety: the trigger watches only the report files (champion_comparison_*.html)
+# and the generator script — NOT index.html — so the bot's own commit does not match.
+# In addition, pushes made with the built-in GITHUB_TOKEN never trigger further
+# workflow runs, so this cannot recurse.
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'docs/champion_comparisons/champion_comparison_*.html'
+      - 'scripts/build_comparison_index.py'
+      - '.github/workflows/champion-comparison-index.yml'
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: champion-comparison-index-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Regenerate index.html
+        run: python scripts/build_comparison_index.py
+
+      - name: Commit if the index changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/champion_comparisons/index.html; then
+            echo "index.html is already up to date — nothing to commit."
+          else
+            git add docs/champion_comparisons/index.html
+            git commit -m "docs: regenerate champion comparison index"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "Committed regenerated index.html."
+          fi

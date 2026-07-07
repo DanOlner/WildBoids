@@ -32,17 +32,10 @@
       "crop": 0.85
     },
     {
-      "card": "Early evolution not so hot\nSpinning isn't a\nterrible search method\n(it's seen in nature)\nbut could be better\nPoor dizzy boids",
-      "clip": "evolved_spinning.mov",
-      "start": 3,
-      "end": 10,
-      "crop": 0.85
-    },
-    {
       "card": "Learning control\nBeginning to target food\nthrough thruster steering\n(shown in orange lines)",
       "clip": "evolved_slower.mov",
-      "start": 3,
-      "end": 17,
+      "start": 9,
+      "end": 18,
       "crop": 0.85
     },
     {
@@ -57,7 +50,7 @@
       "crop": 0.85
     },
     {
-      "card": "Interoception\nA boid that can sense\nits own speed\nand angular momentum",
+      "card": "Interoception\nA boid that can sense\nits own speed\nand angular momentum\ncan learn to target better",
       "clip": "first_interoception_speed_gen47_champion_gen47_6c5b26c9380f8c5e03bac5d1b049e6f58366377b.mov",
       "start": 5,
       "end": 15,
@@ -71,7 +64,7 @@
       "crop": 0.8
     },
     {
-      "card": "More complex vision\nEye position & arc-width now selected for\n& they can see a bit further",
+      "card": "More complex vision\nEye position & arc-width now selected for\n& they have longer-range sight",
       "clip": "singlepred_chase_w_sensor.mov",
       "start": 39,
       "end": 57

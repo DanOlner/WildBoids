@@ -333,3 +333,89 @@ Maps to `PopulationParams` in `src/brain/population.h`.
 | `survivalRate` | 0.25 | Top fraction of each species eligible to breed. Lower = stronger selection pressure. |
 | `elitism` | 1 | Best N genomes per species copied unchanged. Prevents losing the champion to mutation. |
 | `maxStagnation` | 15 | Generations without fitness improvement before a species is culled. Frees slots for productive species. |
+
+---
+
+## Comparing Champions (`scripts/compare_champions.py`)
+
+Standalone Python helper (not part of the C++ build) that loads 1–4 evolved champions and
+produces a **single self-contained HTML report** dissecting and comparing their evolved brains
+and sensor layouts — every figure is inlined as a base64 PNG, so the file is portable and can be
+dropped straight onto GitHub Pages. It needs matplotlib, numpy, and networkx:
+
+```bash
+pip install matplotlib numpy networkx
+```
+
+### What the report contains
+
+| Section | Shows |
+|---------|-------|
+| Architecture summary | Per-champion node/connection counts and weight stats. |
+| **Sensor layout** | Polar plot of each champion's evolved eye angles and arc widths (short- + long-range). Derived from the `morphologyGenome`, so it reflects how vision actually evolved — **not** the static default `compoundEyes` block. |
+| Network overview | The full hidden-node graph, both layered and force-directed (clustered by connection strength). |
+| Weight heatmaps | Direct input×output weights, and effective weights traced through hidden nodes. |
+| Per-thruster detail | A focused subgraph feeding each of the 4 thrusters. |
+| Hidden-node analysis | Processing chains, self-recurrent "memory" nodes, and per-node receptive fields. |
+| Strongest signal paths | The top sensor→thruster paths ranked by effective weight. |
+
+### Modes
+
+| Invocation | Behaviour |
+|------------|-----------|
+| `--package NAME_OR_DIR` | **Package mode:** auto-discovers the prey + predator champions and `sim_config.json` inside a [champion package](#packaging-champions-admin_codepackage_championspy) folder, names the report and output file from the folder, and writes to `docs/champion_comparisons/champion_comparison_<pkg>.html`. |
+| `champ1.json champ2.json …` | **Explicit files:** compare any 1–4 champion JSONs directly. Output defaults to `champion_comparison.html` in the current directory. |
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `champions` (positional) | *(none)* | 1–4 champion JSON files. Omit when using `--package`. |
+| `--package DIR` | *(none)* | A `data/champion_packages/` folder (or any dir of `champion_prey*` / `champion_predator*` JSONs). Auto-discovers champions + `sim_config.json` and names the output from the folder. |
+| `--config PATH` | *(auto)* | `sim_config.json` supplying the morphology arc budgets (`morphologyEvolution.groups`). Defaults to a `sim_config.json` sitting next to each champion, else built-in defaults (360°/100°). |
+| `--output PATH`, `-o` | *(auto)* | Output HTML file. Overrides the mode default. |
+| `--output-dir DIR` | `docs/champion_comparisons` | Directory for `--package` output. |
+| `--top-n N` | 30 | Number of strongest direct connections drawn in the network-overview graphs. |
+
+### Examples
+
+```bash
+# Compare the prey + predator from a champion package; writes
+# docs/champion_comparisons/champion_comparison_2026-03-04.html
+python scripts/compare_champions.py --package data/champion_packages/2026-03-04
+
+# Compare two loose champion files, custom output path
+python scripts/compare_champions.py \
+  data/champions/prey_best.json \
+  data/champions/predators/pred_best.json \
+  -o report.html
+
+# Regenerate reports for every package (populate the GitHub Pages folder)
+for d in data/champion_packages/*/; do
+  python scripts/compare_champions.py --package "$d"
+done
+```
+
+### Published index
+
+Reports live in `docs/champion_comparisons/` for GitHub Pages hosting, with an
+`index.html` landing page linking them all. Rebuild it with
+[`scripts/build_comparison_index.py`](scripts/build_comparison_index.py) (standard-library
+only — no pip install):
+
+```bash
+python scripts/build_comparison_index.py
+```
+
+The **Champion comparison index** workflow
+([`.github/workflows/champion-comparison-index.yml`](.github/workflows/champion-comparison-index.yml))
+runs this automatically and commits the refreshed `index.html` whenever a new
+`champion_comparison_*.html` is pushed to that folder, so the Pages site stays in sync.
+
+> **Sensor layout & morphology.** A saved champion's `compoundEyes` block is only the static
+> default template; the *evolved* eye layout lives in its `morphologyGenome`. This script applies
+> the genome (mirroring the C++ `apply_morphology`) so the Sensor Layout plots — and the sensor
+> angle labels throughout the report — reflect real evolution. To see morphology change *across*
+> generations instead of comparing final champions, use
+> [`scripts/validate_morphology_evolution.py --plot`](scripts/validate_morphology_evolution.py),
+> which produces the eye-layout evolution figure shown near the top of this README.

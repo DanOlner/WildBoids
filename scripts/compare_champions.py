@@ -56,13 +56,62 @@ class ChampionData:
     hidden_ids: list = field(default_factory=list)
     enabled_connections: list = field(default_factory=list)
     recurrent_connections: list = field(default_factory=list)
+    morph_applied: bool = False   # True if eye layout was derived from the evolved genome
 
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_champion(path: str) -> ChampionData:
+# Fallback arc budgets (degrees) and ranges per sensor group, used only when no
+# sim_config.json is available to supply morphologyEvolution.groups. These match
+# the project defaults (group 0 = short-range 360°, group 1 = long-range 100°).
+DEFAULT_MORPH_GROUPS = [
+    {'totalArcDeg': 360.0, 'maxRange': 100.0},
+    {'totalArcDeg': 100.0, 'maxRange': 300.0},
+]
+
+
+def load_morph_config_groups(config_path: str) -> list[dict] | None:
+    """Read morphologyEvolution.groups (arc budgets) from a sim_config.json."""
+    try:
+        with open(config_path) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    groups = cfg.get('morphologyEvolution', {}).get('groups')
+    return groups or None
+
+
+def _apply_morphology_phenotype(compound_eyes: dict, morph_genome: dict,
+                                config_groups: list[dict]):
+    """Rewrite compoundEyes eye angles/arc widths from the evolved morphology genome.
+
+    Mirrors the C++ apply_morphology(): group 0 -> short-range eyes, group 1 ->
+    long-range eyes. Each eye's arc width is its arcFrac share of the group's
+    totalArcDeg budget; its centre angle comes straight from the genome (radians
+    -> degrees). Without this, the saved compoundEyes block is only the static
+    default template, so the report looks like morphology never evolved.
+    """
+    groups = morph_genome.get('groups', [])
+    eye_lists = [compound_eyes.get('eyes', []), compound_eyes.get('longRangeEyes', [])]
+    for gi in range(min(len(groups), len(config_groups), len(eye_lists))):
+        angles = groups[gi].get('angles', [])
+        fracs = groups[gi].get('arcFracs', [])
+        total = sum(fracs)
+        if total <= 0:
+            total = 1.0
+        budget_deg = config_groups[gi].get('totalArcDeg', 360.0)
+        max_range = config_groups[gi].get('maxRange')
+        eyes = eye_lists[gi]
+        for i in range(min(len(eyes), len(angles))):
+            eyes[i]['centerAngleDeg'] = math.degrees(angles[i])
+            eyes[i]['arcWidthDeg'] = (fracs[i] / total) * budget_deg
+            if max_range is not None:
+                eyes[i]['maxRange'] = max_range
+
+
+def load_champion(path: str, config_groups: list[dict] | None = None) -> ChampionData:
     with open(path) as f:
         spec = json.load(f)
 
@@ -79,6 +128,25 @@ def load_champion(path: str) -> ChampionData:
         genome=spec.get('genome', {}),
         morphology=spec.get('morphologyGenome'),
     )
+
+    # Derive the *evolved* eye layout from the morphology genome. A saved champion's
+    # compoundEyes block is only the static default template, so without this the
+    # sensor-layout plots (and sensor angle labels/receptive fields) never reflect
+    # evolution. Arc budgets come from an explicit --config, else a sim_config.json
+    # sitting next to the champion, else the built-in defaults.
+    if champ.morphology and champ.compound_eyes:
+        groups = config_groups
+        if groups is None:
+            sib = p.parent / 'sim_config.json'
+            if sib.exists():
+                groups = load_morph_config_groups(str(sib))
+        if groups is None:
+            groups = DEFAULT_MORPH_GROUPS
+            budgets = [g['totalArcDeg'] for g in DEFAULT_MORPH_GROUPS]
+            print(f'  note: no sim_config.json for {p.name}; using default arc '
+                  f'budgets {budgets}° (pass --config to override)')
+        _apply_morphology_phenotype(champ.compound_eyes, champ.morphology, groups)
+        champ.morph_applied = True
 
     _build_input_map(champ)
     _build_output_map(champ)
@@ -367,6 +435,14 @@ def plot_weight_heatmap(champ: ChampionData, matrix: np.ndarray,
     output_ids = sorted(champ.output_map.keys())
 
     n_in, n_out = matrix.shape
+    if matrix.size == 0:
+        # No inputs or no outputs (e.g. an old champion with no compound eyes).
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, f'{title}: no input×output weights\n{champ.label}',
+                ha='center', va='center', transform=ax.transAxes)
+        ax.axis('off')
+        return fig
+
     fig_height = max(8, n_in * 0.18)
     fig, ax = plt.subplots(figsize=(3 + n_out * 1.2, fig_height))
 
@@ -879,7 +955,9 @@ def plot_morphology(champ: ChampionData) -> plt.Figure:
         ax.set_yticks([])
         ax.set_title(f'{title} ({len(eye_list)} eyes)', fontsize=10, fontweight='bold', pad=20)
 
-    fig.suptitle(f'Sensor Layout — {champ.label}', fontsize=12, fontweight='bold', y=1.02)
+    source = 'evolved genome' if champ.morph_applied else 'default template'
+    fig.suptitle(f'Sensor Layout ({source}) — {champ.label}',
+                 fontsize=12, fontweight='bold', y=1.02)
     fig.tight_layout()
     return fig
 
@@ -956,9 +1034,12 @@ def plot_weight_distributions(champions: list[ChampionData]) -> plt.Figure:
 # ---------------------------------------------------------------------------
 
 def generate_html(champions: list[ChampionData], figures: dict[str, str],
-                  path_tables: dict) -> str:
+                  path_tables: dict,
+                  title: str = 'Champion Neural Network Comparison',
+                  source_label: str | None = None) -> str:
     """Build self-contained HTML report."""
     from datetime import date
+    import html as _html
 
     # Summary cards
     cards_html = ''
@@ -1052,12 +1133,15 @@ def generate_html(champions: list[ChampionData], figures: dict[str, str],
         per_output_html += fig_row(keys)
 
     files_list = ', '.join(f'<code>{Path(c.path).name}</code>' for c in champions)
+    title_esc = _html.escape(title)
+    source_line = (f'Source: <code>{_html.escape(source_label)}</code> | '
+                   if source_label else '')
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Champion Neural Network Comparison</title>
+<title>{title_esc}</title>
 <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
            max-width: 1600px; margin: 0 auto; padding: 20px; background: #fafafa; }}
@@ -1086,8 +1170,8 @@ def generate_html(champions: list[ChampionData], figures: dict[str, str],
 </style>
 </head>
 <body>
-<h1>Champion Neural Network Comparison</h1>
-<p class="meta">Generated: {date.today()} | Files: {files_list}</p>
+<h1>{title_esc}</h1>
+<p class="meta">Generated: {date.today()} | {source_line}Files: {files_list}</p>
 
 <h2>1. Architecture Summary</h2>
 <div class="card-row">{cards_html}</div>
@@ -1134,19 +1218,67 @@ def generate_html(champions: list[ChampionData], figures: dict[str, str],
 def main():
     parser = argparse.ArgumentParser(
         description='Compare evolved boid champion neural networks.')
-    parser.add_argument('champions', nargs='+', help='Champion JSON files (1-4)')
-    parser.add_argument('--output', '-o', default='champion_comparison.html',
-                        help='Output HTML file (default: champion_comparison.html)')
+    parser.add_argument('champions', nargs='*',
+                        help='Champion JSON files (1-4). Omit when using --package.')
+    parser.add_argument('--package', metavar='DIR',
+                        help='A champion_packages folder: auto-discovers its prey + '
+                             'predator champions and sim_config.json, and names the '
+                             'report and output file from the folder name.')
+    parser.add_argument('--config', metavar='PATH',
+                        help='sim_config.json supplying morphology arc budgets. '
+                             'Default: a sim_config.json next to each champion, '
+                             'else built-in defaults.')
+    parser.add_argument('--output', '-o', default=None,
+                        help='Output HTML file. Default: champion_comparison.html, or '
+                             'docs/champion_comparisons/champion_comparison_<pkg>.html '
+                             'in --package mode.')
+    parser.add_argument('--output-dir', default='docs/champion_comparisons', metavar='DIR',
+                        help='Directory for --package output '
+                             '(default: docs/champion_comparisons).')
     parser.add_argument('--top-n', type=int, default=30,
                         help='Strongest connections in overview graph (default: 30)')
     args = parser.parse_args()
 
-    if len(args.champions) > 4:
-        print('Warning: only first 4 champions will be compared')
-        args.champions = args.champions[:4]
+    title = 'Champion Neural Network Comparison'
+    source_label = None
+    champ_paths = list(args.champions)
 
-    print(f'Loading {len(args.champions)} champion(s)...')
-    champions = [load_champion(p) for p in args.champions]
+    if args.package:
+        pkg = Path(args.package)
+        if not pkg.is_dir():
+            parser.error(f'--package: not a directory: {pkg}')
+        prey = sorted(pkg.glob('champion_prey*.json'))
+        pred = sorted(pkg.glob('champion_predator*.json'))
+        champ_paths = [str(p) for p in prey] + [str(p) for p in pred]
+        if not champ_paths:
+            parser.error(f'--package: no champion_prey*/champion_predator*.json '
+                         f'files found in {pkg}')
+        pkg_name = pkg.name
+        title = f'Champion Comparison — {pkg_name}'
+        source_label = pkg_name
+        if args.config is None and (pkg / 'sim_config.json').exists():
+            args.config = str(pkg / 'sim_config.json')
+        if args.output is None:
+            out_dir = Path(args.output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            args.output = str(out_dir / f'champion_comparison_{pkg_name}.html')
+
+    if not champ_paths:
+        parser.error('no champions given: pass champion JSON files or --package DIR')
+    if args.output is None:
+        args.output = 'champion_comparison.html'
+
+    if len(champ_paths) > 4:
+        print('Warning: only first 4 champions will be compared')
+        champ_paths = champ_paths[:4]
+
+    config_groups = load_morph_config_groups(args.config) if args.config else None
+    if args.config and config_groups is None:
+        print(f'Warning: no morphologyEvolution.groups in {args.config}; '
+              f'falling back to per-champion sim_config / defaults')
+
+    print(f'Loading {len(champ_paths)} champion(s)...')
+    champions = [load_champion(p, config_groups) for p in champ_paths]
     for c in champions:
         print(f'  {c.label}: {len(c.input_map)} inputs, {len(c.output_map)} outputs, '
               f'{len(c.hidden_ids)} hidden, {len(c.enabled_connections)} connections')
@@ -1195,11 +1327,15 @@ def main():
 
     # Generate HTML
     print('Generating HTML report...')
-    html = generate_html(champions, figures, path_tables)
+    html = generate_html(champions, figures, path_tables,
+                         title=title, source_label=source_label)
 
-    with open(args.output, 'w') as f:
+    out_path = Path(args.output)
+    if out_path.parent != Path('.'):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, 'w') as f:
         f.write(html)
-    print(f'Report saved to: {args.output}')
+    print(f'Report saved to: {out_path}')
 
 
 if __name__ == '__main__':
