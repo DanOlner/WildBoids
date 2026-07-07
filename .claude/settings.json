@@ -45,7 +45,9 @@
       "Bash(python -c 'import html.parser,sys; *)",
       "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/champion-comparison-index.yml'\\)\\); print\\('workflow YAML OK'\\)\")",
       "Bash(git add *)",
-      "Bash(git -c core.pager=cat diff --stat -- docs/champion_comparisons/index.html)"
+      "Bash(git -c core.pager=cat diff --stat -- docs/champion_comparisons/index.html)",
+      "Bash(git rm *)",
+      "Bash(awk '$1==160000')"
     ],
     "additionalDirectories": [
       "/Users/danolner/Code/danolner/Code/claude/wildboids/local/videos",
